@@ -3,6 +3,7 @@
 from logging import StreamHandler
 from typing import Optional
 from datetime import datetime
+import pytz
 
 
 class CLIHandler(StreamHandler):
@@ -13,7 +14,7 @@ class CLIHandler(StreamHandler):
         exc_info = record.exc_info
         if record.exc_info is not None:
             record.exc_info = None
-        retval = f'{datetime.fromtimestamp(record.created).strftime("%H:%M:%S")} - {record.name.split(".")[-1]} - ' \
+        retval = f'{datetime.fromtimestamp(record.created, pytz.timezone("America/New_York")).strftime("%H:%M:%S")} - {record.name.split(".")[-1]} - ' \
                  f'{record.msg}'
         if exc_info:
             retval += " (See log file for stack trace dump)"

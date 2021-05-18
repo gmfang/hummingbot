@@ -126,7 +126,7 @@ cdef class StrategyBase(TimeIterator):
         raise NotImplementedError
 
     def log_with_clock(self, log_level: int, msg: str, **kwargs):
-        clock_timestamp = pd.Timestamp(self._current_timestamp, unit="s", tz="UTC")
+        clock_timestamp = pd.Timestamp(self._current_timestamp, unit="s", tz="America/New_York")
         self.logger().log(log_level, f"{msg} [clock={str(clock_timestamp)}]", **kwargs)
 
     @property
