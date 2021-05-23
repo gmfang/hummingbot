@@ -13,7 +13,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         object _order_refresh_tolerance_pct
         double _filled_order_delay
         object _inventory_target_base_pct
-        bint _order_optimization_enabled
         bint _add_transaction_costs_to_orders
         bint _hb_app_notification
         bint _is_debug
@@ -48,7 +47,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
     cdef object c_get_mid_price(self)
     cdef object c_create_base_proposal(self)
     cdef tuple c_get_adjusted_available_balance(self, list orders)
-    cdef c_apply_order_price_modifiers(self, object proposal)
     cdef c_apply_budget_constraint(self, object proposal)
     cdef c_apply_order_optimization(self, object proposal)
     cdef c_apply_add_transaction_costs(self, object proposal)

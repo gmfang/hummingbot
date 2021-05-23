@@ -61,7 +61,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                  order_refresh_time: float = 30.0,
                  max_order_age = 1800.0,
                  order_refresh_tolerance_pct: Decimal = s_decimal_neg_one,
-                 order_optimization_enabled = True,
                  filled_order_delay: float = 60.0,
                  inventory_target_base_pct: Decimal = s_decimal_zero,
                  add_transaction_costs_to_orders: bool = True,
@@ -79,7 +78,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         self._sb_order_tracker = OrderTracker()
         self._market_info = market_info
         self._order_amount = order_amount
-        self._order_optimization_enabled = order_optimization_enabled
         self._order_refresh_time = order_refresh_time
         self._max_order_age = max_order_age
         self._order_refresh_tolerance_pct = order_refresh_tolerance_pct
@@ -150,14 +148,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
     @inventory_target_base_pct.setter
     def inventory_target_base_pct(self, value: Decimal):
         self._inventory_target_base_pct = value
-
-    @property
-    def order_optimization_enabled(self) -> bool:
-        return self._order_optimization_enabled
-
-    @order_optimization_enabled.setter
-    def order_optimization_enabled(self, value: bool):
-        self._order_optimization_enabled = value
 
     @property
     def order_refresh_time(self) -> float:
@@ -566,13 +556,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 base_balance += order.quantity
 
         return base_balance, quote_balance
-
-    cdef c_apply_order_price_modifiers(self, object proposal):
-        if self._order_optimization_enabled:
-            self.c_apply_order_optimization(proposal)
-
-        if self._add_transaction_costs_to_orders:
-            self.c_apply_add_transaction_costs(proposal)
 
     cdef c_apply_budget_constraint(self, object proposal):
         cdef:

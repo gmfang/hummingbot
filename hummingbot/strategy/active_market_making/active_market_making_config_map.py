@@ -105,12 +105,6 @@ active_market_making_config_map = {
                   type_str="decimal",
                   validator=validate_order_amount,
                   prompt_on_new=True),
-    "order_optimization_enabled":
-        ConfigVar(key="order_optimization_enabled",
-                  prompt="Do you want to enable best bid ask jumping? (Yes/No) >>> ",
-                  type_str="bool",
-                  default=True,
-                  validator=validate_bool),
     "min_profit_percent":
         ConfigVar(key="min_profit_percent",
                   prompt="Enter the minimum profitability percent of total order amount required to init a trade"
