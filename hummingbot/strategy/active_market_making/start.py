@@ -18,7 +18,6 @@ import pandas as pd
 def start(self):
     try:
         order_amount = c_map.get("order_amount").value
-        order_optimization_enabled = c_map.get("order_optimization_enabled").value
         order_refresh_time = c_map.get("order_refresh_time").value
         exchange = c_map.get("exchange").value.lower()
         raw_trading_pair = c_map.get("market").value
