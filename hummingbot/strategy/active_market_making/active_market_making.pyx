@@ -39,7 +39,7 @@ s_decimal_neg_one = Decimal(-1)
 s_decimal_one = Decimal(1)
 pmm_logger = None
 
-cdef class SpoofingMarketMakingStrategy(StrategyBase):
+cdef class ActiveMarketMakingStrategy(StrategyBase):
     OPTION_LOG_CREATE_ORDER = 1 << 3
     OPTION_LOG_MAKER_ORDER_FILLED = 1 << 4
     OPTION_LOG_STATUS_REPORT = 1 << 5
@@ -728,9 +728,9 @@ cdef class SpoofingMarketMakingStrategy(StrategyBase):
                 proposal.sells = sorted(proposal.sells, key=lambda p: p.price)
                 for i, proposed in enumerate(proposal.sells):
                     proposal.sells[i].price = market.c_quantize_order_price(self.trading_pair, price_below_ask)
-                # self.logger().info(
-                #     f"Ping-pong set the Ask price to {price_below_ask} instead of {proposal.sells[0].price}. "
-                # )
+                self.logger().info(
+                    f"Ping-pong set the Ask price to {price_below_ask} instead of {proposal.sells[0].price}. "
+                )
             else:
                 # Get the top ask price in the market using order_optimization_depth and your sell order volume
                 top_ask_price = self._market_info.get_price_for_volume(
@@ -1010,11 +1010,14 @@ cdef class SpoofingMarketMakingStrategy(StrategyBase):
             self._filled_buys_balance = self._filled_sells_balance = 0
         if self._filled_buys_balance > 0:
             proposal.buys = proposal.buys[self._filled_buys_balance:]
+            self.logger().info(
+                f"Ping-pong removed {self._filled_buys_balance} buy orders. "
+            )
         if self._filled_sells_balance > 0:
             proposal.sells = proposal.sells[self._filled_sells_balance:]
-            # self.logger().info(
-            #     f"Ping-pong removed {self._filled_sells_balance} sell orders. "
-            # )
+            self.logger().info(
+                f"Ping-pong removed {self._filled_sells_balance} sell orders. "
+            )
 
     def dump_debug_variables(self):
         market = self._market_info.market
