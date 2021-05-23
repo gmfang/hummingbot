@@ -149,7 +149,7 @@ active_market_making_config_map = {
                   prompt="How long do you want to wait before placing the next order "
                          "if your order gets filled (in seconds)? >>> ",
                   type_str="float",
-                  validator=lambda v: validate_decimal(v, min_value=0, inclusive=False),
+                  validator=lambda v: validate_decimal(v, min_value=0, inclusive=True),
                   default=60),
     "inventory_target_base_pct":
         ConfigVar(key="inventory_target_base_pct",
