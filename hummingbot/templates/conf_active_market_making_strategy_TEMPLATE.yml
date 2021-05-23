@@ -38,8 +38,6 @@ add_transaction_costs: null
 min_profit_percent: null
 
 # Avellaneda - Stoikov algorithm parameters
-risk_factor: null
-order_amount_shape_factor: null
 closing_time: null
 
 # Buffer size used to store historic samples and calculate volatility

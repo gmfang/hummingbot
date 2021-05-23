@@ -49,7 +49,6 @@ def start(self):
         self.strategy = ActiveMarketMakingStrategy(
             market_info=MarketTradingPairTuple(*maker_data),
             order_amount=order_amount,
-            order_optimization_enabled=order_optimization_enabled,
             inventory_target_base_pct=inventory_target_base_pct,
             order_refresh_time=order_refresh_time,
             order_refresh_tolerance_pct=order_refresh_tolerance_pct,
