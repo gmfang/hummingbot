@@ -517,6 +517,11 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                                                       self._order_amount)
                 if size > 0:
                     buys.append(PriceSize(price, size))
+            else:
+                self.logger().info(
+                    f"Spread is too tight. Current top Bid: {top_bid_price}. "
+                    f"Current top Ask: {top_ask_price}. "
+                )
         else:
             # This means that we just filled 1 buy order. Creating a
             # corresponding sell order for it.
