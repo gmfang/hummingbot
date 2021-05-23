@@ -43,11 +43,6 @@ def validate_max_spread(value: str) -> Optional[str]:
             return f"Max spread cannot be lesser or equal to min spread {max_spread}%<={min_spread}%"
 
 
-def onvalidated_min_spread(value: str):
-    # If entered valid min_spread, max_spread is invalidated so user sets it up again
-    active_market_making_config_map["max_spread"].value = None
-
-
 async def order_amount_prompt() -> str:
     exchange = active_market_making_config_map["exchange"].value
     trading_pair = active_market_making_config_map["market"].value
@@ -116,71 +111,12 @@ active_market_making_config_map = {
                   type_str="bool",
                   default=True,
                   validator=validate_bool),
-    "parameters_based_on_spread":
-        ConfigVar(key="parameters_based_on_spread",
-                  prompt="Do you want to automate active-Stoikov parameters based on min/max spread? >>> ",
-                  type_str="bool",
-                  validator=validate_bool,
-                  on_validated=on_validated_parameters_based_on_spread,
-                  default=True,
-                  prompt_on_new=True),
-    "min_spread":
-        ConfigVar(key="min_spread",
-                  prompt="Enter the minimum spread allowed from mid-price in percentage "
-                         "(Enter 1 to indicate 1%) >>> ",
+    "min_profit_percent":
+        ConfigVar(key="min_profit_percent",
+                  prompt="Enter the minimum profitability percent of total order amount required to init a trade"
+                     "(Enter 0.1 to indicate 0.1%) >>> ",
                   type_str="decimal",
-                  required_if=lambda: active_market_making_config_map.get("parameters_based_on_spread").value,
-                  validator=lambda v: validate_decimal(v, 0, 100, inclusive=False),
-                  prompt_on_new=True,
-                  on_validated=onvalidated_min_spread),
-    "max_spread":
-        ConfigVar(key="max_spread",
-                  prompt="Enter the maximum spread allowed from mid-price in percentage "
-                         "(Enter 1 to indicate 1%) >>> ",
-                  type_str="decimal",
-                  required_if=lambda: active_market_making_config_map.get("parameters_based_on_spread").value,
-                  validator=lambda v: validate_max_spread(v),
-                  prompt_on_new=True),
-    "vol_to_spread_multiplier":
-        ConfigVar(key="vol_to_spread_multiplier",
-                  prompt="Enter the Volatility threshold multiplier (Should be greater than 1.0): "
-                         "(If market volatility multiplied by this value is above the maximum spread, it will increase the maximum spread value) >>>",
-                  type_str="decimal",
-                  required_if=lambda: active_market_making_config_map.get("parameters_based_on_spread").value,
-                  validator=lambda v: validate_decimal(v, 1, 10, inclusive=False),
-                  prompt_on_new=True),
-    "inventory_risk_aversion":
-        ConfigVar(key="inventory_risk_aversion",
-                  prompt="Enter Inventory risk aversion between 0 and 1: (For values close to 0.999 spreads will be more "
-                         "skewed to meet the inventory target, while close to 0.001 spreads will be close to symmetrical, "
-                         "increasing profitability but also increasing inventory risk)>>>",
-                  type_str="decimal",
-                  required_if=lambda: active_market_making_config_map.get("parameters_based_on_spread").value,
-                  validator=lambda v: validate_decimal(v, 0, 1, inclusive=False),
-                  prompt_on_new=True),
-    "order_book_depth_factor":
-        ConfigVar(key="order_book_depth_factor",
-                  printable_key="order_book_depth_factor(\u03BA)",
-                  prompt="Enter order book depth factor (\u03BA) >>> ",
-                  type_str="decimal",
-                  required_if=lambda: not active_market_making_config_map.get("parameters_based_on_spread").value,
-                  validator=lambda v: validate_decimal(v, 0, 1e10, inclusive=False),
-                  prompt_on_new=True),
-    "risk_factor":
-        ConfigVar(key="risk_factor",
-                  printable_key="risk_factor(\u03B3)",
-                  prompt="Enter risk factor (\u03B3) >>> ",
-                  type_str="decimal",
-                  required_if=lambda: not active_market_making_config_map.get("parameters_based_on_spread").value,
-                  validator=lambda v: validate_decimal(v, 0, 1e10, inclusive=False),
-                  prompt_on_new=True),
-    "order_amount_shape_factor":
-        ConfigVar(key="order_amount_shape_factor",
-                  printable_key="order_amount_shape_factor(\u03B7)",
-                  prompt="Enter order amount shape factor (\u03B7) >>> ",
-                  type_str="decimal",
-                  required_if=lambda: not active_market_making_config_map.get("parameters_based_on_spread").value,
-                  validator=lambda v: validate_decimal(v, 0, 1, inclusive=True),
+                  validator=lambda v: validate_decimal(v, 0, 100, inclusive=True),
                   prompt_on_new=True),
     "closing_time":
         ConfigVar(key="closing_time",

@@ -68,19 +68,12 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                  logging_options: int = OPTION_LOG_ALL,
                  status_report_interval: float = 900,
                  hb_app_notification: bool = False,
-                 parameters_based_on_spread: bool = True,
-                 min_spread: Decimal = Decimal("0.15"),
-                 max_spread: Decimal = Decimal("2"),
-                 vol_to_spread_multiplier: Decimal = Decimal("1.3"),
-                 inventory_risk_aversion: Decimal = Decimal("0.5"),
-                 order_book_depth_factor: Decimal = Decimal("0.1"),
-                 risk_factor: Decimal = Decimal("0.5"),
-                 order_amount_shape_factor: Decimal = Decimal("0.005"),
                  closing_time: Decimal = Decimal("1"),
                  debug_csv_path: str = '',
                  volatility_buffer_size: int = 30,
                  is_debug: bool = True,
                  ping_pong_enabled: bool = True,
+                 min_profit_percent: Decimal = Decimal("0")
                  ):
         super().__init__()
         self._sb_order_tracker = OrderTracker()
@@ -108,16 +101,8 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
 
         self.c_add_markets([market_info.market])
         self._ticks_to_be_ready = volatility_buffer_size
-        self._parameters_based_on_spread = parameters_based_on_spread
-        self._min_spread = min_spread
-        self._max_spread = max_spread
-        self._vol_to_spread_multiplier = vol_to_spread_multiplier
-        self._inventory_risk_aversion = inventory_risk_aversion
         self._avg_vol = AverageVolatilityIndicator(volatility_buffer_size, 1)
         self._last_sampling_timestamp = 0
-        self._kappa = order_book_depth_factor
-        self._gamma = risk_factor
-        self._eta = order_amount_shape_factor
         self._time_left = closing_time
         self._closing_time = closing_time
         self._latest_parameter_calculation_vol = s_decimal_zero
@@ -128,6 +113,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         self._debug_csv_path = debug_csv_path
         self._is_debug = is_debug
         self._ping_pong_enabled = ping_pong_enabled
+        self._min_profit_percent = min_profit_percent
         try:
             if self._is_debug:
                 os.unlink(self._debug_csv_path)
@@ -354,13 +340,10 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         else:
             lines.extend(["", "  No active maker orders."])
 
-        volatility_pct = self._avg_vol.current_value / float(self.get_price()) * 100.0
-        if all((self._gamma, self._kappa, volatility_pct)):
-            lines.extend(["", f"  Strategy parameters:",
-                          f"    risk_factor(\u03B3)= {self._gamma:.5E}",
-                          f"    order_book_depth_factor(\u03BA)= {self._kappa:.5E}",
-                          f"    volatility= {volatility_pct:.3f}%",
-                          f"    time until end of trading cycle= {str(datetime.timedelta(seconds=float(self._time_left) // 1e3))}"])
+        volatility_pct = self._avg_vol.current_value / float(
+            self.get_price()) * 100.0
+        if volatility_pct:
+            lines.extend(["", f"    volatility= {volatility_pct:.3f}%"])
 
         warning_lines.extend(self.balance_warning([self._market_info]))
 
@@ -410,31 +393,17 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
 
             self.c_collect_market_variables(timestamp)
             if self.c_is_algorithm_ready():
-                # If gamma or kappa are -1 then it's the first time they are calculated.
-                # Also, if volatility goes beyond the threshold specified, we consider volatility regime has changed
-                # so parameters need to be recalculated.
-                if (self._gamma is None) or (self._kappa is None) or \
-                        (self._parameters_based_on_spread and
-                         self.volatility_diff_from_last_parameter_calculation(self.get_volatility()) > (
-                                 self._vol_to_spread_multiplier - 1)):
-                    self.c_recalculate_parameters()
-                self.c_calculate_reserved_price_and_optimal_spread()
-
                 proposal = None
                 if self._create_timestamp <= self._current_timestamp:
-                    # 1. Create base order proposals
+                    # 1. Create a base buy/sell proposal
                     proposal = self.c_create_base_proposal()
-                    # 2. Apply ping-pong to make sure always making one sided orders.
+                    # 2. This merely just reset buy/sell order balance.
                     if self._ping_pong_enabled:
                         self.c_apply_ping_pong(proposal)
-                    # 3. Apply functions that modify orders amount
-                    self.c_apply_order_amount_eta_transformation(proposal)
-                    # 4. Apply functions that modify orders price
-                    self.c_apply_order_price_modifiers(proposal)
-                    # 5. Apply budget constraint, i.e. can't buy/sell more than what you have.
+                    # 3. Apply budget constraint, i.e. can't buy/sell more than what you have.
                     self.c_apply_budget_constraint(proposal)
 
-                self.c_cancel_active_orders(proposal)
+                self.c_cancel_active_orders()
                 if self._is_debug:
                     self.dump_debug_variables()
                 refresh_proposal = self.c_aged_order_refresh()
@@ -462,12 +431,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         inventory_in_base = quote_balance / price + base_balance
         self._q_adjustment_factor = Decimal(
             "1e5") / inventory_in_base
-        if self._time_left == 0:
-            # Re-cycle algorithm
-            self._time_left = self._closing_time
-            if self._parameters_based_on_spread:
-                self.c_recalculate_parameters()
-            self.logger().info("Recycling algorithm time left and parameters if needed.")
 
     def volatility_diff_from_last_parameter_calculation(self, current_vol):
         if self._latest_parameter_calculation_vol == 0:
@@ -492,47 +455,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 vol = Decimal(str(self.c_get_spread() / 2))
         return vol
 
-    cdef c_calculate_reserved_price_and_optimal_spread(self):
-        cdef:
-            ExchangeBase market = self._market_info.market
-
-        time_left_fraction = Decimal(str(self._time_left / self._closing_time))
-
-        price = self.get_price()
-        q = (market.get_balance(self.base_asset) - Decimal(
-            str(self.c_calculate_target_inventory()))) * self._q_adjustment_factor
-        vol = self.get_volatility()
-        mid_price_variance = vol ** 2
-
-        self._reserved_price = price - (q * self._gamma * mid_price_variance * time_left_fraction)
-        self._optimal_spread = self._gamma * mid_price_variance * time_left_fraction + 2 * Decimal(
-            1 + self._gamma / self._kappa).ln() / self._gamma
-
-        if self._parameters_based_on_spread:
-            min_limit_bid = min(price * (1 - self._max_spread), price - self._vol_to_spread_multiplier * vol)
-            max_limit_bid = price * (1 - self._min_spread)
-            min_limit_ask = price * (1 + self._min_spread)
-            max_limit_ask = max(price * (1 + self._max_spread), price + self._vol_to_spread_multiplier * vol)
-        else:
-            min_limit_bid = s_decimal_zero
-            max_limit_bid = min_limit_ask = price
-            max_limit_ask = Decimal("Inf")
-
-        self._optimal_ask = min(max(self._reserved_price + self._optimal_spread / 2,
-                                    min_limit_ask),
-                                max_limit_ask)
-        self._optimal_bid = min(max(self._reserved_price - self._optimal_spread / 2,
-                                    min_limit_bid),
-                                max_limit_bid)
-        # This is not what the algorithm will use as proposed bid and ask. This is just the raw output.
-        # Optimal bid and optimal ask prices will be used
-        if self._is_debug:
-            self.logger().info(
-                f"bid={(price - (self._reserved_price - self._optimal_spread / 2)) / price * 100:.4f}% | "
-                f"ask={((self._reserved_price + self._optimal_spread / 2) - price) / price * 100:.4f}% | "
-                f"q={q / self._q_adjustment_factor:.4f} | "
-                f"vol={vol:.4f}")
-
     cdef object c_calculate_target_inventory(self):
         cdef:
             ExchangeBase market = self._market_info.market
@@ -552,45 +474,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         target_inventory_value = inventory_value * self._inventory_target_base_pct
         return market.c_quantize_order_amount(trading_pair, Decimal(str(target_inventory_value / price)))
 
-    cdef c_recalculate_parameters(self):
-        cdef:
-            ExchangeBase market = self._market_info.market
-
-        q = (market.get_balance(self.base_asset) - self.c_calculate_target_inventory()) * self._q_adjustment_factor
-        vol = self.get_volatility()
-        price = self.get_price()
-
-        if q != 0:
-            min_spread = self._min_spread * price
-            max_spread = self._max_spread * price
-
-            # GAMMA
-            # If q or vol are close to 0, gamma will -> Inf. Is this desirable?
-            max_possible_gamma = min(
-                (max_spread - min_spread) / (2 * abs(q) * (vol ** 2)),
-                (max_spread * (2 - self._inventory_risk_aversion) /
-                 self._inventory_risk_aversion + min_spread) / (vol ** 2))
-            self._gamma = self._inventory_risk_aversion * max_possible_gamma
-
-            # KAPPA
-            # Want the maximum possible spread but with restrictions to avoid negative kappa or division by 0
-            max_spread_around_reserved_price = max_spread * (
-                        2 - self._inventory_risk_aversion) + min_spread * self._inventory_risk_aversion
-            if max_spread_around_reserved_price <= self._gamma * (vol ** 2):
-                self._kappa = Decimal('1e100')  # Cap to kappa -> Infinity
-            else:
-                self._kappa = self._gamma / (Decimal.exp(
-                    (max_spread_around_reserved_price * self._gamma - (vol * self._gamma) ** 2) / 2) - 1)
-
-            # ETA
-
-            q_where_to_decay_order_amount = self.c_calculate_target_inventory() * (1 - self._inventory_risk_aversion)
-            self._eta = s_decimal_one
-            if q_where_to_decay_order_amount != s_decimal_zero:
-                self._eta = self._eta / q_where_to_decay_order_amount
-
-            self._latest_parameter_calculation_vol = vol
-
     cdef bint c_is_algorithm_ready(self):
         return self._avg_vol.is_sampling_buffer_full
 
@@ -600,15 +483,69 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             list buys = []
             list sells = []
 
-        price = market.c_quantize_order_price(self.trading_pair, Decimal(str(self._optimal_bid)))
-        size = market.c_quantize_order_amount(self.trading_pair, self._order_amount)
-        if size > 0:
-            buys.append(PriceSize(price, size))
+        # Equal here means we haven't create a buy order yet.
+        if self._filled_buys_balance == self._filled_sells_balance:
+            # Check if there's opportunity to create a buy order.
+            top_bid_price = self._market_info.get_price_for_volume(
+                False, self._order_amount).result_price
+            bid_price_quantum = market.c_get_order_price_quantum(
+                self.trading_pair,
+                top_bid_price
+            )
+            # Reset the top bid price 1 basis point above the top bid
+            top_bid_price = (ceil(top_bid_price / bid_price_quantum) + 1) * bid_price_quantum
 
-        price = market.c_quantize_order_price(self.trading_pair, Decimal(str(self._optimal_ask)))
-        size = market.c_quantize_order_amount(self.trading_pair, self._order_amount)
-        if size > 0:
-            sells.append(PriceSize(price, size))
+            buy_fee = market.c_get_fee(self.base_asset, self.quote_asset,
+                                       OrderType.LIMIT, TradeType.BUY,
+                                       self._order_amount, top_bid_price)
+
+            top_ask_price = self._market_info.get_price_for_volume(
+                True, self._order_amount).result_price
+            ask_price_quantum = market.c_get_order_price_quantum(
+                self.trading_pair,
+                top_ask_price
+            )
+            # Reset the top ask price to 1 basis point below the top ask
+            top_ask_price = (floor(
+                top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
+            sell_fee = market.c_get_fee(self.base_asset, self.quote_asset,
+                                        self._limit_order_type, TradeType.SELL,
+                                        self._order_amount, top_ask_price)
+
+            if top_ask_price * (Decimal(1) - sell_fee.percent) / (
+                    top_bid_price * (
+                    Decimal(
+                        1) + buy_fee.percent) + self._min_profit_percent) >= 1.0:
+                self.logger().info(
+                    f"Initiate a Buy. Current top Bid: {top_bid_price}. "
+                    f"Current top Ask: {top_ask_price}. "
+                )
+                price = market.c_quantize_order_price(self.trading_pair,
+                                                      Decimal(
+                                                          str(top_bid_price)))
+                size = market.c_quantize_order_amount(self.trading_pair,
+                                                      self._order_amount)
+                if size > 0:
+                    buys.append(PriceSize(price, size))
+        else:
+            # This means that we just filled 1 buy order. Creating a
+            # corresponding sell order for it.
+            top_ask_price = self._market_info.get_price_for_volume(
+                True, self._order_amount).result_price
+            ask_price_quantum = market.c_get_order_price_quantum(
+                self.trading_pair,
+                top_ask_price
+            )
+            # Reset the top ask price to below the top ask
+            top_ask_price = (floor(
+                top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
+            self.logger().info(
+                f"Initiate a Sell. Current top Ask: {top_ask_price}."
+            )
+            price = market.c_quantize_order_price(self.trading_pair, Decimal(str(top_ask_price)))
+            size = market.c_quantize_order_amount(self.trading_pair, self._order_amount)
+            if size > 0:
+                sells.append(PriceSize(price, size))
 
         return Proposal(buys, sells)
 
@@ -728,9 +665,9 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 proposal.sells = sorted(proposal.sells, key=lambda p: p.price)
                 for i, proposed in enumerate(proposal.sells):
                     proposal.sells[i].price = market.c_quantize_order_price(self.trading_pair, price_below_ask)
-                self.logger().info(
-                    f"Ping-pong set the Ask price to {price_below_ask} instead of {proposal.sells[0].price}. "
-                )
+                # self.logger().info(
+                #     f"Ping-pong set the Ask price to {price_below_ask} instead of {proposal.sells[0].price}. "
+                # )
             else:
                 # Get the top ask price in the market using order_optimization_depth and your sell order volume
                 top_ask_price = self._market_info.get_price_for_volume(
@@ -748,30 +685,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 higher_sell_price = max(proposal.sells[0].price, price_below_ask)
                 for i, proposed in enumerate(proposal.sells):
                     proposal.sells[i].price = market.c_quantize_order_price(self.trading_pair, higher_sell_price)
-
-    cdef c_apply_order_amount_eta_transformation(self, object proposal):
-        cdef:
-            ExchangeBase market = self._market_info.market
-            str trading_pair = self._market_info.trading_pair
-
-        # eta parameter is described in the paper as the shape parameter for having exponentially decreasing order amount
-        # for orders that go against inventory target (i.e. Want to buy when excess inventory or sell when deficit inventory)
-        q = market.get_balance(self.base_asset) - self.c_calculate_target_inventory()
-        if len(proposal.buys) > 0:
-            if q > 0:
-                for i, proposed in enumerate(proposal.buys):
-                    proposal.buys[i].size = market.c_quantize_order_amount(trading_pair,
-                                                                           proposal.buys[i].size * Decimal.exp(
-                                                                               -self._eta * q))
-                proposal.buys = [o for o in proposal.buys if o.size > 0]
-
-        if len(proposal.sells) > 0:
-            if q < 0:
-                for i, proposed in enumerate(proposal.sells):
-                    proposal.sells[i].size = market.c_quantize_order_amount(trading_pair,
-                                                                            proposal.sells[i].size * Decimal.exp(
-                                                                                self._eta * q))
-                proposal.sells = [o for o in proposal.sells if o.size > 0]
 
     cdef object c_apply_add_transaction_costs(self, object proposal):
         cdef:
@@ -881,8 +794,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         return True
 
     # Cancel active orders
-    # Return value: whether order cancellation is deferred.
-    cdef c_cancel_active_orders(self, object proposal):
+    cdef c_cancel_active_orders(self):
         if self._cancel_timestamp > self._current_timestamp:
             return
         if not global_config_map.get("0x_active_cancels").value:
@@ -897,20 +809,8 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             bint to_defer_canceling = False
         if len(active_orders) == 0:
             return
-        if proposal is not None:
-            active_buy_prices = [Decimal(str(o.price)) for o in active_orders if o.is_buy]
-            active_sell_prices = [Decimal(str(o.price)) for o in active_orders if not o.is_buy]
-            proposal_buys = [buy.price for buy in proposal.buys]
-            proposal_sells = [sell.price for sell in proposal.sells]
-            if self.c_is_within_tolerance(active_buy_prices, proposal_buys) and \
-                    self.c_is_within_tolerance(active_sell_prices, proposal_sells):
-                to_defer_canceling = True
-
-        if not to_defer_canceling:
-            for order in active_orders:
-                self.c_cancel_order(self._market_info, order.client_order_id)
-        else:
-            self.set_timers()
+        for order in active_orders:
+            self.c_cancel_order(self._market_info, order.client_order_id)
 
     # Refresh all active order that are older that the _max_order_age
     cdef c_aged_order_refresh(self):
@@ -1008,16 +908,10 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
     cdef c_apply_ping_pong(self, object proposal):
         if self._filled_buys_balance == self._filled_sells_balance:
             self._filled_buys_balance = self._filled_sells_balance = 0
-        if self._filled_buys_balance > 0:
-            proposal.buys = proposal.buys[self._filled_buys_balance:]
-            self.logger().info(
-                f"Ping-pong removed {self._filled_buys_balance} buy orders. "
-            )
-        if self._filled_sells_balance > 0:
-            proposal.sells = proposal.sells[self._filled_sells_balance:]
-            self.logger().info(
-                f"Ping-pong removed {self._filled_sells_balance} sell orders. "
-            )
+        # if self._filled_buys_balance > 0:
+        #     proposal.buys = proposal.buys[self._filled_buys_balance:]
+        # if self._filled_sells_balance > 0:
+        #     proposal.sells = proposal.sells[self._filled_sells_balance:]
 
     def dump_debug_variables(self):
         market = self._market_info.market
@@ -1041,14 +935,8 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                                        'target_inv',
                                        'time_left_fraction',
                                        'mid_price std_dev',
-                                       'gamma',
-                                       'kappa',
-                                       'eta',
                                        'current_vol_to_calculation_vol',
-                                       'inventory_target_pct',
-                                       'min_spread',
-                                       'max_spread',
-                                       'vol_to_spread_multiplier')])
+                                       'inventory_target_pct',)])
             df_header.to_csv(self._debug_csv_path, mode='a', header=False, index=False)
         df = pd.DataFrame([(mid_price,
                             spread,
@@ -1062,12 +950,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                             self.c_calculate_target_inventory(),
                             self._time_left / self._closing_time,
                             self._avg_vol.current_value,
-                            self._gamma,
-                            self._kappa,
-                            self._eta,
                             self.volatility_diff_from_last_parameter_calculation(self.get_volatility()),
-                            self.inventory_target_base_pct,
-                            self._min_spread,
-                            self._max_spread,
-                            self._vol_to_spread_multiplier)])
+                            self.inventory_target_base_pct)])
         df.to_csv(self._debug_csv_path, mode='a', header=False, index=False)

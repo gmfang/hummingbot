@@ -32,13 +32,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         double _last_sampling_timestamp
         bint _parameters_based_on_spread
         int _ticks_to_be_ready
-        object _min_spread
-        object _max_spread
-        object _vol_to_spread_multiplier
-        object _inventory_risk_aversion
-        object _kappa
-        object _gamma
-        object _eta
         object _closing_time
         object _time_left
         object _q_adjustment_factor
@@ -50,17 +43,17 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         str _debug_csv_path
         object _avg_vol
         bint _ping_pong_enabled
+        object _min_profit_percent
 
     cdef object c_get_mid_price(self)
     cdef object c_create_base_proposal(self)
     cdef tuple c_get_adjusted_available_balance(self, list orders)
     cdef c_apply_order_price_modifiers(self, object proposal)
-    cdef c_apply_order_amount_eta_transformation(self, object proposal)
     cdef c_apply_budget_constraint(self, object proposal)
     cdef c_apply_order_optimization(self, object proposal)
     cdef c_apply_add_transaction_costs(self, object proposal)
     cdef bint c_is_within_tolerance(self, list current_prices, list proposal_prices)
-    cdef c_cancel_active_orders(self, object proposal)
+    cdef c_cancel_active_orders(self)
     cdef c_aged_order_refresh(self)
     cdef bint c_to_create_orders(self, object proposal)
     cdef c_execute_orders_proposal(self, object proposal)
@@ -68,7 +61,5 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
     cdef double c_get_spread(self)
     cdef c_collect_market_variables(self, double timestamp)
     cdef bint c_is_algorithm_ready(self)
-    cdef c_calculate_reserved_price_and_optimal_spread(self)
     cdef object c_calculate_target_inventory(self)
-    cdef c_recalculate_parameters(self)
     cdef c_apply_ping_pong(self, object proposal)
