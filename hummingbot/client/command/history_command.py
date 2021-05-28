@@ -167,13 +167,16 @@ class HistoryCommand:
         lines.extend(["", "  Assets:"] + ["    " + line for line in assets_df.to_string(index=False).split("\n")])
 
         perf_data = [
-            ["Hold portfolio value    ", f"{smart_round(perf.hold_value, precision)} {quote}"],
+            ["Start portfolio value    ", f"{smart_round(perf.hold_value, precision)} {quote}"],
             ["Current portfolio value ", f"{smart_round(perf.cur_value, precision)} {quote}"],
             ["Trade P&L               ", f"{smart_round(perf.trade_pnl, precision)} {quote}"]
         ]
         perf_data.extend(
             ["Fees paid               ", f"{smart_round(fee_amount, precision)} {fee_token}"]
             for fee_token, fee_amount in perf.fees.items()
+        )
+        perf_data.extend(
+            ["Total fees in quote     ", f"{smart_round(perf.fee_in_quote, precision)} {quote}"]
         )
         perf_data.extend(
             [["Total P&L               ", f"{smart_round(perf.total_pnl, precision)} {quote}"],

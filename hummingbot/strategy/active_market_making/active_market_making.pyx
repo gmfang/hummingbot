@@ -44,6 +44,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
     OPTION_LOG_MAKER_ORDER_FILLED = 1 << 4
     OPTION_LOG_STATUS_REPORT = 1 << 5
     OPTION_LOG_ALL = 0x7fffffffffffffff
+    MIN_ORDER_AMOUNT_SIZE_USDT = Decimal(10)
 
     # These are exchanges where you're expected to expire orders instead of actively cancelling them.
     RADAR_RELAY_TYPE_EXCHANGES = {"radar_relay", "bamboo_relay"}
@@ -518,7 +519,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 if size > 0:
                     buys.append(PriceSize(price, size))
             else:
-                self.logger().info(
+                self.logger().debug(
                     f"Spread is too tight. Current top Bid: {top_bid_price}. "
                     f"Current top Ask: {top_ask_price}. "
                 )
@@ -591,7 +592,12 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
 
         for sell in proposal.sells:
             base_size = sell.size
-
+            # Assuming the quote is USDT. Cancel the sell order if the order size
+            # is less than 10 USDT because it'll get rejected and stuck.
+            if sell.price * base_size <= self.MIN_ORDER_AMOUNT_SIZE_USDT:
+                sell.size = s_decimal_zero
+                # Switch ping pong back to buy.
+                self._filled_sells_balance += 1
             # Adjust sell order size to use remaining balance if less than the order amount
             if base_balance < base_size:
                 adjusted_amount = market.c_quantize_order_amount(self.trading_pair, base_balance)
@@ -741,6 +747,8 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             f"{clock_timestamp.strftime('%m/%d, %H:%M:%S')} - Maker BUY order {limit_order_record.quantity} {limit_order_record.base_currency} @ "
             f"{limit_order_record.price} {limit_order_record.quote_currency} is filled."
         )
+        # TODO: Instead of waiting for next tick, sell immediately on c_did_complete_buy_order
+        # TODO: 1) create_base_proposal 2) execute_proposal (in dev branch)
 
     cdef c_did_complete_sell_order(self, object order_completed_event):
         cdef:
@@ -896,10 +904,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
     cdef c_apply_ping_pong(self, object proposal):
         if self._filled_buys_balance == self._filled_sells_balance:
             self._filled_buys_balance = self._filled_sells_balance = 0
-        # if self._filled_buys_balance > 0:
-        #     proposal.buys = proposal.buys[self._filled_buys_balance:]
-        # if self._filled_sells_balance > 0:
-        #     proposal.sells = proposal.sells[self._filled_sells_balance:]
 
     def dump_debug_variables(self):
         market = self._market_info.market
