@@ -159,8 +159,8 @@ async def calculate_performance_metrics(exchange: str,
     perf.avg_b_price = abs(perf.avg_b_price)
     perf.avg_s_price = abs(perf.avg_s_price)
 
-    perf.cur_base_bal = current_balances.get(base, 0)
-    perf.cur_quote_bal = current_balances.get(quote, 0)
+    perf.cur_base_bal = current_balances.get(base, s_decimal_0)
+    perf.cur_quote_bal = current_balances.get(quote, s_decimal_0)
     perf.start_base_bal = perf.cur_base_bal - perf.tot_vol_base
     perf.start_quote_bal = perf.cur_quote_bal - perf.tot_vol_quote
 
@@ -231,6 +231,8 @@ async def calculate_performance_metrics(exchange: str,
 
 
 def smart_round(value: Decimal, precision: Optional[int] = None) -> Decimal:
+    # AttributeError: 'int' object has no attribute 'is_nan'
+    # This happens when exporting history as json and one of the values is int instead of Decimal.
     if value is None or value.is_nan():
         return value
     if precision is not None:
