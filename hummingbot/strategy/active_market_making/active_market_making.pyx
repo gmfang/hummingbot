@@ -517,10 +517,10 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                                                       self._order_amount)
                 if size > 0:
                     buys.append(PriceSize(price, size))
-                self.logger().info(
-                    f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
-                    f"Current top Ask: {top_ask_price}. Amount: {size}. "
-                )
+                    self.logger().info(
+                        f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
+                        f"Current top Ask: {top_ask_price}. Amount: {size}. "
+                    )
             else:
                 self.logger().debug(
                     f"Spread is too tight. Current top Bid: {top_bid_price}. "
@@ -541,9 +541,9 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             size = market.c_quantize_order_amount(self.trading_pair, base_balance)
             if size > 0:
                 sells.append(PriceSize(price, size))
-            self.logger().info(
-                f"Initiate a Sell proposal. Current top Ask: {top_ask_price}. Amount: {size}."
-            )
+                self.logger().info(
+                    f"Initiate a Sell proposal. Current top Ask: {top_ask_price}. Amount: {size}."
+                )
 
         return Proposal(buys, sells)
 
