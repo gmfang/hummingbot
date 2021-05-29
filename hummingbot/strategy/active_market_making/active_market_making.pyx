@@ -499,9 +499,15 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 self.trading_pair,
                 top_ask_price
             )
+            self.logger().info(
+                f"Top ask before adjustment {top_ask_price}. "
+            )
             # Reset the top ask price to 1 basis point below the top ask
             top_ask_price = (floor(
                 top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
+            self.logger().info(
+                f"Top ask after adjustment {top_ask_price}. "
+            )
             sell_fee = market.c_get_fee(self.base_asset, self.quote_asset,
                                         self._limit_order_type, TradeType.SELL,
                                         self._order_amount, top_ask_price)
@@ -744,26 +750,24 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
 
             if order_filled_event.trade_type is TradeType.BUY:
                 if self._logging_options & self.OPTION_LOG_MAKER_ORDER_FILLED:
-                    # Sell the amount immediately.
-                    sell_proposal = self.c_create_sell_proposal(order_filled_event.amount)
-                    self.c_execute_orders_proposal(sell_proposal)
                     self.logger().info(
                         f"({market_info.trading_pair}) Maker buy order of "
                         f"{order_filled_event.amount} {market_info.base_asset} filled."
                     )
-                    self.log_with_clock(
-                        logging.INFO,
-                        f"({market_info.trading_pair}) Maker buy order of "
-                        f"{order_filled_event.amount} {market_info.base_asset} filled."
-                    )
+                    # Sell the amount immediately.
+                    trade_fee_amount = s_decimal_zero
+                    # When buy order filled, the trade fee is deducted from the
+                    # base asset amount bought, so here need to deduct from
+                    # total bought amount to reflect the correct balance.
+                    for asset, amount in order_filled_event.trade_fee.flat_fees:
+                        if asset == self.base_asset:
+                            trade_fee_amount = amount
+                    sell_amount = order_filled_event.amount - trade_fee_amount
+                    sell_proposal = self.c_create_sell_proposal(sell_amount)
+                    self.c_execute_orders_proposal(sell_proposal)
             else:
                 if self._logging_options & self.OPTION_LOG_MAKER_ORDER_FILLED:
                     self.logger().info(
-                        f"({market_info.trading_pair}) Maker sell order of "
-                        f"{order_filled_event.amount} {market_info.base_asset} filled."
-                    )
-                    self.log_with_clock(
-                        logging.INFO,
                         f"({market_info.trading_pair}) Maker sell order of "
                         f"{order_filled_event.amount} {market_info.base_asset} filled."
                     )
