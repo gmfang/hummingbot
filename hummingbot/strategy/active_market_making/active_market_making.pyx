@@ -390,10 +390,10 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                     # 1. Get current balance.
                     base_balance, quote_balance = self.c_get_adjusted_available_balance(
                       self.active_orders)
-                    # 1. Create a base buy/sell proposal.
+                    # 2. Create a base buy/sell proposal.
                     proposal = self.c_create_base_proposal(base_balance,
                                                          quote_balance)
-                    # 2. Apply budget constraint, i.e. can't buy/sell more than what you have.
+                    # 3. Apply budget constraint, i.e. can't buy/sell more than what you have.
                     self.c_apply_budget_constraint(proposal, base_balance,
                                                  quote_balance)
 
@@ -511,8 +511,8 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                     Decimal(
                         1) + buy_fee.percent) + self._min_profit_percent) >= 1.0:
                 self.logger().info(
-                    f"Initiate a Buy. Current top Bid: {top_bid_price}. "
-                    f"Current top Ask: {top_ask_price}. "
+                    f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
+                    f"Current top Ask: {top_ask_price}. Amount: {self._order_amount}. "
                 )
                 price = market.c_quantize_order_price(self.trading_pair,
                                                       Decimal(
@@ -538,7 +538,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             top_ask_price = (floor(
                 top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
             self.logger().info(
-                f"Initiate a Sell. Current top Ask: {top_ask_price}."
+                f"Initiate a Sell proposal. Current top Ask: {top_ask_price}. Amount: {base_balance}."
             )
             price = market.c_quantize_order_price(self.trading_pair, Decimal(str(top_ask_price)))
             size = market.c_quantize_order_amount(self.trading_pair, base_balance)
@@ -722,7 +722,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         top_ask_price = (floor(
             top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
         self.logger().info(
-            f"Initiate an Immediate Sell. Current top Ask: {top_ask_price}."
+            f"Initiate an Immediate Sell at (Price, Size): {top_ask_price}, {amount}."
         )
         price = market.c_quantize_order_price(self.trading_pair,
                                               Decimal(str(top_ask_price)))
@@ -747,7 +747,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                     # Sell the amount immediately.
                     sell_proposal = self.c_create_sell_proposal(order_filled_event.amount)
                     self.c_execute_orders_proposal(sell_proposal)
-                    self.logger().log(
+                    self.logger().info(
                         f"({market_info.trading_pair}) Maker buy order of "
                         f"{order_filled_event.amount} {market_info.base_asset} filled."
                     )
@@ -758,7 +758,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                     )
             else:
                 if self._logging_options & self.OPTION_LOG_MAKER_ORDER_FILLED:
-                    self.logger().log(
+                    self.logger().info(
                         f"({market_info.trading_pair}) Maker sell order of "
                         f"{order_filled_event.amount} {market_info.base_asset} filled."
                     )
