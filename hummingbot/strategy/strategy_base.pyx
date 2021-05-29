@@ -472,7 +472,7 @@ cdef class StrategyBase(TimeIterator):
         if self._sb_order_tracker.c_check_and_track_cancel(order_id):
             self.log_with_clock(
                 logging.INFO,
-                f"({market_trading_pair_tuple.trading_pair}) Cancelling the limit order {order_id}."
+                f"({market_trading_pair_tuple.trading_pair}) Cancelling the current limit order {order_id}."
             )
             market.c_cancel(market_trading_pair_tuple.trading_pair, order_id)
     # ----------------------------------------------------------------------------------------------------------
