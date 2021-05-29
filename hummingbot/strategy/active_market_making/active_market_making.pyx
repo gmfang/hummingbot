@@ -499,15 +499,9 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 self.trading_pair,
                 top_ask_price
             )
-            self.logger().info(
-                f"Top ask before adjustment {top_ask_price}. "
-            )
             # Reset the top ask price to 1 basis point below the top ask
             top_ask_price = (floor(
                 top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
-            self.logger().info(
-                f"Top ask after adjustment {top_ask_price}. "
-            )
             sell_fee = market.c_get_fee(self.base_asset, self.quote_asset,
                                         self._limit_order_type, TradeType.SELL,
                                         self._order_amount, top_ask_price)
