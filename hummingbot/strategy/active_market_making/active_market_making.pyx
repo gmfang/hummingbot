@@ -510,10 +510,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                     top_bid_price * (
                     Decimal(
                         1) + buy_fee.percent) + self._min_profit_percent) >= 1.0:
-                self.logger().info(
-                    f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
-                    f"Current top Ask: {top_ask_price}. Amount: {self._order_amount}. "
-                )
                 price = market.c_quantize_order_price(self.trading_pair,
                                                       Decimal(
                                                           str(top_bid_price)))
@@ -521,6 +517,10 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                                                       self._order_amount)
                 if size > 0:
                     buys.append(PriceSize(price, size))
+                self.logger().info(
+                    f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
+                    f"Current top Ask: {top_ask_price}. Amount: {size}. "
+                )
             else:
                 self.logger().debug(
                     f"Spread is too tight. Current top Bid: {top_bid_price}. "
@@ -537,13 +537,13 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             # Reset the top ask price to below the top ask
             top_ask_price = (floor(
                 top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
-            self.logger().info(
-                f"Initiate a Sell proposal. Current top Ask: {top_ask_price}. Amount: {base_balance}."
-            )
             price = market.c_quantize_order_price(self.trading_pair, Decimal(str(top_ask_price)))
             size = market.c_quantize_order_amount(self.trading_pair, base_balance)
             if size > 0:
                 sells.append(PriceSize(price, size))
+            self.logger().info(
+                f"Initiate a Sell proposal. Current top Ask: {top_ask_price}. Amount: {size}."
+            )
 
         return Proposal(buys, sells)
 
