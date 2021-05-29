@@ -154,6 +154,8 @@ cdef class PubSub:
         if it == self._events.end():
             return
 
+        # TODO: HAHA this is how event_listener get used. Which eventually
+        # TODO: call c_did_fill_order
         # It is extremely important that this set of listeners is a C++ copy - because listeners are allowed to call
         # c_remove_listener(), which breaks the iterator if we're using the underlying set.
         listeners = deref(it).second

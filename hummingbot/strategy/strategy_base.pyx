@@ -52,6 +52,7 @@ cdef class FundingPaymentCompletedListener(BaseStrategyEventListener):
         self._owner.c_did_complete_funding_payment(arg)
 
 
+# TODO: HAHA listeners
 cdef class OrderFilledListener(BaseStrategyEventListener):
     cdef c_call(self, object arg):
         self._owner.c_did_fill_order(arg)

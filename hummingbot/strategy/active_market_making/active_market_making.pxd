@@ -43,14 +43,19 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         object _avg_vol
         bint _ping_pong_enabled
         object _min_profit_percent
+        # Whether the current tick cycle should create buy orders.
+        bint _is_buy
 
     cdef object c_get_mid_price(self)
-    cdef object c_create_base_proposal(self)
+    cdef object c_create_base_proposal(self, object base_balance,
+                                       object quote_balance)
     cdef tuple c_get_adjusted_available_balance(self, list orders)
-    cdef c_apply_budget_constraint(self, object proposal)
+    cdef c_apply_budget_constraint(self, object proposal, object base_balance,
+                                   object quote_balance)
     cdef c_apply_order_optimization(self, object proposal)
     cdef c_apply_add_transaction_costs(self, object proposal)
-    cdef bint c_is_within_tolerance(self, list current_prices, list proposal_prices)
+    cdef bint c_is_within_tolerance(self, list current_prices,
+                                    list proposal_prices)
     cdef c_cancel_active_orders(self)
     cdef c_aged_order_refresh(self)
     cdef bint c_to_create_orders(self, object proposal)
@@ -61,3 +66,4 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
     cdef bint c_is_algorithm_ready(self)
     cdef object c_calculate_target_inventory(self)
     cdef c_apply_ping_pong(self, object proposal)
+    cdef object c_create_sell_proposal(self, object amount)
