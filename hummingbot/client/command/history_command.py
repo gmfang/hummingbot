@@ -176,7 +176,7 @@ class HistoryCommand:
             for fee_token, fee_amount in perf.fees.items()
         )
         perf_data.extend(
-            ["Total fees in quote     ", f"{smart_round(perf.fee_in_quote, precision)} {quote}"]
+            [["Total fees in quote     ", f"{smart_round(perf.fee_in_quote, precision)} {quote}"]]
         )
         perf_data.extend(
             [["Total P&L               ", f"{smart_round(perf.total_pnl, precision)} {quote}"],
