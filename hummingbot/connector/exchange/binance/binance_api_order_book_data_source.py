@@ -28,10 +28,10 @@ from hummingbot.connector.exchange.binance.binance_utils import convert_to_excha
 
 TRADING_PAIR_FILTER = re.compile(r"(BTC|ETH|USDT)$")
 
-SNAPSHOT_REST_URL = "https://api.binance.{}/api/v1/depth"
+SNAPSHOT_REST_URL = "https://api.binance.{}/api/v3/depth"
 DIFF_STREAM_URL = "wss://stream.binance.{}:9443/ws"
-TICKER_PRICE_CHANGE_URL = "https://api.binance.{}/api/v1/ticker/24hr"
-EXCHANGE_INFO_URL = "https://api.binance.{}/api/v1/exchangeInfo"
+TICKER_PRICE_CHANGE_URL = "https://api.binance.{}/api/v3/ticker/24hr"
+EXCHANGE_INFO_URL = "https://api.binance.{}/api/v3/exchangeInfo"
 
 
 class BinanceAPIOrderBookDataSource(OrderBookTrackerDataSource):
@@ -182,7 +182,7 @@ class BinanceAPIOrderBookDataSource(OrderBookTrackerDataSource):
     async def listen_for_order_book_diffs(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
         while True:
             try:
-                ws_path: str = "/".join([f"{convert_to_exchange_trading_pair(trading_pair).lower()}@depth"
+                ws_path: str = "/".join([f"{convert_to_exchange_trading_pair(trading_pair).lower()}@depth@100ms"
                                          for trading_pair in self._trading_pairs])
                 url = DIFF_STREAM_URL.format(self._domain)
                 stream_url: str = f"{url}/{ws_path}"
