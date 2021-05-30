@@ -477,6 +477,56 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             list buys = []
             list sells = []
 
+        # # Create a buy order
+        # if self._is_buy:
+        #     # Check if there's opportunity to create a buy order.
+        #     top_bid_price = self._market_info.get_price_for_volume(
+        #         False, self._order_amount).result_price
+        #     bid_price_quantum = market.c_get_order_price_quantum(
+        #         self.trading_pair,
+        #         top_bid_price
+        #     )
+        #     # Reset the top bid price 1 basis point above the top bid
+        #     top_bid_price = (ceil(top_bid_price / bid_price_quantum) + 1) * bid_price_quantum
+        #
+        #     buy_fee = market.c_get_fee(self.base_asset, self.quote_asset,
+        #                                OrderType.LIMIT, TradeType.BUY,
+        #                                self._order_amount, top_bid_price)
+        #
+        #     top_ask_price = self._market_info.get_price_for_volume(
+        #         True, self._order_amount).result_price
+        #     ask_price_quantum = market.c_get_order_price_quantum(
+        #         self.trading_pair,
+        #         top_ask_price
+        #     )
+        #     # Reset the top ask price to 1 basis point below the top ask
+        #     top_ask_price = (floor(
+        #         top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
+        #     sell_fee = market.c_get_fee(self.base_asset, self.quote_asset,
+        #                                 self._limit_order_type, TradeType.SELL,
+        #                                 self._order_amount, top_ask_price)
+        #
+        #     if top_ask_price * (Decimal(1) - sell_fee.percent) / (
+        #             top_bid_price * (
+        #             Decimal(
+        #                 1) + buy_fee.percent) + self._min_profit_percent) >= 1.0:
+        #         price = market.c_quantize_order_price(self.trading_pair,
+        #                                               Decimal(
+        #                                                   str(top_bid_price)))
+        #         size = market.c_quantize_order_amount(self.trading_pair,
+        #                                               self._order_amount)
+        #         if size > 0:
+        #             buys.append(PriceSize(price, size))
+        #             self.logger().info(
+        #                 f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
+        #                 f"Current top Ask: {top_ask_price}. Amount: {size}. "
+        #             )
+        #     else:
+        #         self.logger().debug(
+        #             f"Spread is too tight. Current top Bid: {top_bid_price}. "
+        #             f"Current top Ask: {top_ask_price}. "
+        #         )
+
         # Create a buy order
         if self._is_buy:
             # Check if there's opportunity to create a buy order.
@@ -486,8 +536,9 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 self.trading_pair,
                 top_bid_price
             )
-            # Reset the top bid price 1 basis point above the top bid
-            top_bid_price = (ceil(top_bid_price / bid_price_quantum) + 1) * bid_price_quantum
+            # Quant the bid price
+            top_bid_price = ceil(
+                top_bid_price / bid_price_quantum) * bid_price_quantum
 
             buy_fee = market.c_get_fee(self.base_asset, self.quote_asset,
                                        OrderType.LIMIT, TradeType.BUY,
@@ -499,32 +550,30 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 self.trading_pair,
                 top_ask_price
             )
-            # Reset the top ask price to 1 basis point below the top ask
-            top_ask_price = (floor(
-                top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
+            # Quant the bid price
+            top_ask_price = floor(
+                top_ask_price / ask_price_quantum) * ask_price_quantum
             sell_fee = market.c_get_fee(self.base_asset, self.quote_asset,
                                         self._limit_order_type, TradeType.SELL,
                                         self._order_amount, top_ask_price)
 
-            if top_ask_price * (Decimal(1) - sell_fee.percent) / (
-                    top_bid_price * (
-                    Decimal(
-                        1) + buy_fee.percent) + self._min_profit_percent) >= 1.0:
-                price = market.c_quantize_order_price(self.trading_pair,
-                                                      Decimal(
-                                                          str(top_bid_price)))
-                size = market.c_quantize_order_amount(self.trading_pair,
-                                                      self._order_amount)
-                if size > 0:
-                    buys.append(PriceSize(price, size))
-                    self.logger().info(
-                        f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
-                        f"Current top Ask: {top_ask_price}. Amount: {size}. "
-                    )
-            else:
-                self.logger().debug(
-                    f"Spread is too tight. Current top Bid: {top_bid_price}. "
-                    f"Current top Ask: {top_ask_price}. "
+            # Spread width in percentage from mid price to bid/ask.
+            mid_spread = (top_ask_price - top_bid_price) / (top_ask_price + top_bid_price)
+            left_hand = ((Decimal(2) * self._min_profit_percent)/ (top_ask_price + top_bid_price) + buy_fee.percent + sell_fee.percent) / (Decimal(1) + buy_fee.percent)
+            gap = left_hand / mid_spread
+            # buy price = mid * (1 - mid_spread * gap)
+            my_bid_price = ((top_ask_price + top_bid_price) / Decimal(2)) * (Decimal(1) - mid_spread * gap)
+
+            size = market.c_quantize_order_amount(self.trading_pair,
+                                                  self._order_amount)
+            if size > 0:
+                buys.append(PriceSize(my_bid_price, size))
+                self.logger().info(
+                    f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
+                    f"Current top Ask: {top_ask_price}. Amount: {size}. "
+                    f"My Bid price: {my_bid_price}."
+                    f"Mid Spread: {mid_spread}."
+                    f"Gap value: {gap}."
                 )
         # Create a sell order
         if base_balance > s_decimal_zero:
