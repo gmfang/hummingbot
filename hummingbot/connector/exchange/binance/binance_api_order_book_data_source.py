@@ -28,10 +28,10 @@ from hummingbot.connector.exchange.binance.binance_utils import convert_to_excha
 
 TRADING_PAIR_FILTER = re.compile(r"(BTC|ETH|USDT)$")
 
-SNAPSHOT_REST_URL = "https://api.binance.{}/api/v3/depth"
+SNAPSHOT_REST_URL = "https://api.binance.{}/api/v1/depth"
 DIFF_STREAM_URL = "wss://stream.binance.{}:9443/ws"
-TICKER_PRICE_CHANGE_URL = "https://api.binance.{}/api/v3/ticker/24hr"
-EXCHANGE_INFO_URL = "https://api.binance.{}/api/v3/exchangeInfo"
+TICKER_PRICE_CHANGE_URL = "https://api.binance.{}/api/v1/ticker/24hr"
+EXCHANGE_INFO_URL = "https://api.binance.{}/api/v1/exchangeInfo"
 
 
 class BinanceAPIOrderBookDataSource(OrderBookTrackerDataSource):
