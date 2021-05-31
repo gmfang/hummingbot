@@ -52,7 +52,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
     cdef tuple c_get_adjusted_available_balance(self, list orders)
     cdef c_apply_budget_constraint(self, object proposal, object base_balance,
                                    object quote_balance)
-    cdef c_apply_order_optimization(self, object proposal)
     cdef c_apply_add_transaction_costs(self, object proposal)
     cdef bint c_is_within_tolerance(self, list current_prices,
                                     list proposal_prices)
@@ -67,3 +66,4 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
     cdef object c_calculate_target_inventory(self)
     cdef c_apply_ping_pong(self, object proposal)
     cdef object c_create_sell_proposal(self, object amount)
+    cdef c_immediate_market_sell(self, object amount)

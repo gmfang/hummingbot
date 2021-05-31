@@ -674,75 +674,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
 
         proposal.sells = [o for o in proposal.sells if o.size > 0]
 
-    # Compare the market price with the top bid and top ask price
-    cdef c_apply_order_optimization(self, object proposal):
-        cdef:
-            ExchangeBase market = self._market_info.market
-            object own_buy_size = s_decimal_zero
-            object own_sell_size = s_decimal_zero
-            object best_order_spread
-
-        for order in self.active_orders:
-            if order.is_buy:
-                own_buy_size = order.quantity
-            else:
-                own_sell_size = order.quantity
-
-        if len(proposal.buys) > 0:
-            # Get the top bid price in the market using order_optimization_depth and your buy order volume
-            top_bid_price = self._market_info.get_price_for_volume(
-                False, own_buy_size).result_price
-            price_quantum = market.c_get_order_price_quantum(
-                self.trading_pair,
-                top_bid_price
-            )
-            # Get the price above the top bid
-            price_above_bid = (ceil(top_bid_price / price_quantum) + 1) * price_quantum
-
-            # If the price_above_bid is lower than the price suggested by the top pricing proposal,
-            # lower the price and from there apply the best_order_spread to each order in the next levels
-            proposal.buys = sorted(proposal.buys, key=lambda p: p.price, reverse=True)
-            lower_buy_price = min(proposal.buys[0].price, price_above_bid)
-            for i, proposed in enumerate(proposal.buys):
-                proposal.buys[i].price = market.c_quantize_order_price(self.trading_pair, lower_buy_price)
-
-        if len(proposal.sells) > 0:
-            # If filled buy order is not 0, this means that we just filled a buy order. In that case we want to sell
-            # immediately. Hence set a price lower than top ask price.
-            if self._ping_pong_enabled and self._filled_buys_balance > 0:
-                # Get the top ask price without volume because we want to sell immediately.
-                top_ask_price_without_volume = self._market_info.get_price(True)
-                price_quantum = market.c_get_order_price_quantum(
-                    self.trading_pair,
-                    top_ask_price_without_volume
-                )
-                # Get the price below the top ask
-                price_below_ask = (floor(top_ask_price_without_volume / price_quantum) - 1) * price_quantum
-
-                proposal.sells = sorted(proposal.sells, key=lambda p: p.price)
-                for i, proposed in enumerate(proposal.sells):
-                    proposal.sells[i].price = market.c_quantize_order_price(self.trading_pair, price_below_ask)
-                # self.logger().info(
-                #     f"Ping-pong set the Ask price to {price_below_ask} instead of {proposal.sells[0].price}. "
-                # )
-            else:
-                # Get the top ask price in the market using order_optimization_depth and your sell order volume
-                top_ask_price = self._market_info.get_price_for_volume(
-                    True, own_sell_size).result_price
-                price_quantum = market.c_get_order_price_quantum(
-                    self.trading_pair,
-                    top_ask_price
-                )
-                # Get the price below the top ask
-                price_below_ask = (floor(top_ask_price / price_quantum) - 1) * price_quantum
-
-                # If the price_below_ask is higher than the price suggested by the pricing proposal,
-                # increase your price and from there apply the best_order_spread to each order in the next levels
-                proposal.sells = sorted(proposal.sells, key=lambda p: p.price)
-                higher_sell_price = max(proposal.sells[0].price, price_below_ask)
-                for i, proposed in enumerate(proposal.sells):
-                    proposal.sells[i].price = market.c_quantize_order_price(self.trading_pair, higher_sell_price)
-
     cdef object c_apply_add_transaction_costs(self, object proposal):
         cdef:
             ExchangeBase market = self._market_info.market
@@ -783,6 +714,27 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
 
         return Proposal(buys, sells)
 
+    cdef c_immediate_market_sell(self, object amount):
+        cdef:
+            double expiration_seconds = self._order_refresh_time
+            str order_id
+            ExchangeBase market = self._market_info.market
+
+        size = market.c_quantize_order_amount(self.trading_pair, amount)
+        if self._logging_options & self.OPTION_LOG_CREATE_ORDER:
+            self.logger().info(
+                  f"({self.trading_pair}) Creating Immediate Market Sell order for amount: {size}."
+                )
+            order_id = self.c_sell_with_specific_market(
+                    self._market_info,
+                    size,
+                    order_type=OrderType.MARKET,
+                    price=Decimal("nan"),
+                    expiration_seconds=expiration_seconds
+                )
+        # Order created. Set timer properly.
+        self.set_timers()
+
     cdef c_did_fill_order(self, object order_filled_event):
         cdef:
             str order_id = order_filled_event.order_id
@@ -808,8 +760,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                         if asset == self.base_asset:
                             trade_fee_amount = amount
                     sell_amount = order_filled_event.amount - trade_fee_amount
-                    sell_proposal = self.c_create_sell_proposal(sell_amount)
-                    self.c_execute_orders_proposal(sell_proposal)
+                    self.c_immediate_market_sell(sell_amount)
             else:
                 if self._logging_options & self.OPTION_LOG_MAKER_ORDER_FILLED:
                     self.logger().info(
