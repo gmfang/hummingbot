@@ -573,7 +573,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                     f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
                     f"Current top Ask: {top_ask_price}. Amount: {size}.\n"
                     f"Mid price: {round((top_ask_price + top_bid_price) / Decimal(2), 5)}.\n"
-                    f"Mid Spread %: {round(mid_spread * Decimal(100), 5)}.\n"
+                    f"Mid Spread Percentage: {round(mid_spread * Decimal(100), 5)}%.\n"
                     f"My Bid price: {round(my_bid_price, 5)}.\n"
                     f"Gap Multiplier: {round(gap_multiplier, 5)}."
                 )
