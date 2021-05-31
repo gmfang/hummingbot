@@ -560,9 +560,10 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             # Spread width in percentage from mid price to bid/ask.
             mid_spread = (top_ask_price - top_bid_price) / (top_ask_price + top_bid_price)
             left_hand = ((Decimal(2) * self._min_profit_percent)/ (top_ask_price + top_bid_price) + buy_fee.percent + sell_fee.percent) / (Decimal(1) + buy_fee.percent)
-            gap = left_hand / mid_spread
+            # The multiplier calculated from spread and desired profit percent.
+            gap_multiplier = left_hand / mid_spread
             # buy price = mid * (1 - mid_spread * gap)
-            my_bid_price = ((top_ask_price + top_bid_price) / Decimal(2)) * (Decimal(1) - mid_spread * gap)
+            my_bid_price = ((top_ask_price + top_bid_price) / Decimal(2)) * (Decimal(1) - mid_spread * gap_multiplier)
 
             size = market.c_quantize_order_amount(self.trading_pair,
                                                   self._order_amount)
@@ -570,10 +571,11 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 buys.append(PriceSize(my_bid_price, size))
                 self.logger().info(
                     f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
-                    f"Current top Ask: {top_ask_price}. Amount: {size}. "
-                    f"My Bid price: {my_bid_price}."
-                    f"Mid Spread: {mid_spread}."
-                    f"Gap value: {gap}."
+                    f"Current top Ask: {top_ask_price}. Amount: {size}.\n"
+                    f"Mid price: {round((top_ask_price + top_bid_price) / Decimal(2), 5)}.\n"
+                    f"Mid Spread %: {round(mid_spread * Decimal(100), 5)}.\n"
+                    f"My Bid price: {round(my_bid_price, 5)}.\n"
+                    f"Gap Multiplier: {round(gap_multiplier, 5)}."
                 )
         # Create a sell order
         if base_balance > s_decimal_zero:

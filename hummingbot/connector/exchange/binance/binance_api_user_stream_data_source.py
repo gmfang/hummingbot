@@ -16,7 +16,7 @@ from hummingbot.core.utils.async_utils import safe_ensure_future
 from binance.client import Client as BinanceClient
 from hummingbot.logger import HummingbotLogger
 
-BINANCE_API_ENDPOINT = "https://api.binance.{}/api/v1/"
+BINANCE_API_ENDPOINT = "https://api.binance.{}/api/v3/"
 BINANCE_USER_STREAM_ENDPOINT = "userDataStream"
 BINANCE_WSS_USER_STREAM = "wss://stream.binance.{}:9443/ws/"
 
