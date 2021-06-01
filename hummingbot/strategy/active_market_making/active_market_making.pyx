@@ -799,7 +799,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             f"{clock_timestamp.strftime('%m/%d, %H:%M:%S')} - Maker BUY order {limit_order_record.quantity} {limit_order_record.base_currency} @ "
             f"{limit_order_record.price} {limit_order_record.quote_currency} is filled."
         )
-        # TODO: Instead of waiting for next tick, sell immediately on c_did_complete_buy_order. (Actually I already did this in did_fill event)
 
     cdef c_did_complete_sell_order(self, object order_completed_event):
         cdef:

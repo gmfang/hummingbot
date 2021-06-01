@@ -867,12 +867,21 @@ cdef class BinanceExchange(ExchangeBase):
         price_str = f"{price:f}"
         type_str = BinanceExchange.binance_order_type(order_type)
         side_str = BinanceClient.SIDE_BUY if trade_type is TradeType.BUY else BinanceClient.SIDE_SELL
-        api_params = {"symbol": convert_to_exchange_trading_pair(trading_pair),
-                      "side": side_str,
-                      "quantity": amount_str,
-                      "type": type_str,
-                      "newClientOrderId": order_id,
-                      "price": price_str}
+        if order_type == OrderType.MARKET:
+            api_params = {
+                "symbol": convert_to_exchange_trading_pair(trading_pair),
+                "side": side_str,
+                "quantity": amount_str,
+                "type": type_str,
+                "newClientOrderId": order_id}
+        else:
+            api_params = {
+                "symbol": convert_to_exchange_trading_pair(trading_pair),
+                "side": side_str,
+                "quantity": amount_str,
+                "type": type_str,
+                "newClientOrderId": order_id,
+                "price": price_str}
         if order_type == OrderType.LIMIT:
             api_params["timeInForce"] = BinanceClient.TIME_IN_FORCE_GTC
         self.c_start_tracking_order(order_id,
