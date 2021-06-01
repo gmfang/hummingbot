@@ -760,7 +760,8 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                         if asset == self.base_asset:
                             trade_fee_amount = amount
                     sell_amount = order_filled_event.amount - trade_fee_amount
-                    self.c_immediate_market_sell(sell_amount)
+                    sell_proposal = self.c_create_sell_proposal(sell_amount)
+                    self.c_execute_orders_proposal(sell_proposal)
             else:
                 if self._logging_options & self.OPTION_LOG_MAKER_ORDER_FILLED:
                     self.logger().info(

@@ -144,7 +144,7 @@ class StartCommand:
                                                            self.strategy, 0.1)
                     self.clock.add_iterator(self._script_iterator)
                     self._notify(f"Script ({script_file}) started.")
-
+            # TODO: HAHA this is where everything starts
             self.strategy_task: asyncio.Task = safe_ensure_future(self._run_clock(), loop=self.ev_loop)
             self._notify(f"\n'{strategy_name}' strategy started.\n"
                          f"Run `status` command to query the progress.")

@@ -97,6 +97,7 @@ class BinanceOrderBookTracker(OrderBookTracker):
                 )
                 await asyncio.sleep(5.0)
 
+    # TODO: HAHA this is where the order book diff message got processed from Queue.
     async def _track_single_book(self, trading_pair: str):
         past_diffs_window: Deque[OrderBookMessage] = deque()
         self._past_diffs_windows[trading_pair] = past_diffs_window
