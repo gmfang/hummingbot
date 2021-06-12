@@ -893,7 +893,10 @@ cdef class BinanceExchange(ExchangeBase):
                                     order_type
                                     )
         try:
+            now = time.perf_counter()
             order_result = await self.query_api(self._binance_client.create_order, **api_params)
+            latency = time.perf_counter() - now
+            self.logger().info(f"Create order: {order_id} took {latency:0.5f} seconds to finish.")
             exchange_order_id = str(order_result["orderId"])
             tracked_order = self._in_flight_orders.get(order_id)
             if tracked_order is not None:
@@ -945,13 +948,16 @@ cdef class BinanceExchange(ExchangeBase):
 
     async def execute_cancel(self, trading_pair: str, order_id: str):
         try:
+            now = time.perf_counter()
             cancel_result = await self.query_api(self._binance_client.cancel_order,
                                                  symbol=convert_to_exchange_trading_pair(trading_pair),
                                                  origClientOrderId=order_id)
+            latency = time.perf_counter() - now
+            self.logger().info(f"Cancel Order: {order_id} took {latency:0.5f} seconds to finish.")
         except BinanceAPIException as e:
             if "Unknown order sent" in e.message or e.code == 2011:
                 # The order was never there to begin with. So cancelling it is a no-op but semantically successful.
-                self.logger().debug(f"The order {order_id} does not exist on Binance. No cancellation needed.")
+                self.logger().info(f"The order {order_id} does not exist on Binance. No cancellation needed.")
                 self.c_stop_tracking_order(order_id)
                 self.c_trigger_event(self.MARKET_ORDER_CANCELLED_EVENT_TAG,
                                      OrderCancelledEvent(self._current_timestamp, order_id))
