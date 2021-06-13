@@ -23,8 +23,8 @@ BINANCE_WSS_USER_STREAM = "wss://stream.binance.{}:9443/ws/"
 
 class BinanceAPIUserStreamDataSource(UserStreamTrackerDataSource):
 
-    MESSAGE_TIMEOUT = 30.0
-    PING_TIMEOUT = 10.0
+    MESSAGE_TIMEOUT = 10.0
+    PING_TIMEOUT = 5.0
 
     _bausds_logger: Optional[HummingbotLogger] = None
 
@@ -111,11 +111,15 @@ class BinanceAPIUserStreamDataSource(UserStreamTrackerDataSource):
                 try:
                     if self._current_listen_key is None:
                         self._current_listen_key = await self.get_listen_key()
-                        self.logger().debug(f"Obtained listen key {self._current_listen_key}.")
+                        self.logger().info(f"Obtained listen key {self._current_listen_key}.")
                         if self._listen_for_user_stream_task is not None:
                             self._listen_for_user_stream_task.cancel()
+                        # Here we start to queue the incoming websocket messages. The log_user_stream() should be
+                        # running for as long as there are messages, until the _inner_message() times out(stop
+                        # receiving messages). Then this will wait for next tick, reconnect and restart accepting
+                        # incoming messages.
                         self._listen_for_user_stream_task = safe_ensure_future(self.log_user_stream(output))
-                        await self.wait_til_next_tick(seconds=60.0)
+                        await self.wait_til_next_tick(seconds=1.0)
 
                     success: bool = await self.ping_listen_key(self._current_listen_key)
                     if not success:
@@ -126,7 +130,7 @@ class BinanceAPIUserStreamDataSource(UserStreamTrackerDataSource):
                         continue
                     self.logger().debug(f"Refreshed listen key {self._current_listen_key}.")
 
-                    await self.wait_til_next_tick(seconds=60.0)
+                    await self.wait_til_next_tick(seconds=1.0)
                 except asyncio.CancelledError:
                     raise
                 except Exception:

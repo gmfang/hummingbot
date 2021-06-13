@@ -712,9 +712,11 @@ cdef class BinanceExchange(ExchangeBase):
                 self.logger().error("Unexpected error in user stream listener loop.", exc_info=True)
                 await asyncio.sleep(5.0)
 
+    # TODO: this gets run every tick as well!
     async def _status_polling_loop(self):
         while True:
             try:
+                # Every while loop we reset the _poll_notifier so that c_tick can set() it to trigger this.
                 self._poll_notifier = asyncio.Event()
                 await self._poll_notifier.wait()
                 await safe_gather(

@@ -74,6 +74,7 @@ cdef class Clock:
             self._current_context.append(iterator)
         if self._started:
             (<TimeIterator>iterator).c_start(self, self._current_tick)
+        self.logger().info(f"Adding iterator type: {iterator.__class__.__name__}")
         self._child_iterators.append(iterator)
 
     def remove_iterator(self, iterator: TimeIterator):
@@ -112,11 +113,18 @@ cdef class Clock:
                 await asyncio.sleep(next_tick_time - now)
                 self._current_tick = next_tick_time
 
+                # TODO: consider run this concurrently!!
                 # Run through all the child iterators.
                 for ci in self._current_context:
                     child_iterator = ci
                     try:
+                        time_now = time.perf_counter()
+
                         child_iterator.c_tick(self._current_tick)
+
+                        latency = time.perf_counter() - time_now
+                        self.logger().info(
+                            f"Iterator type: {child_iterator.__class__.__name__} took {latency:0.5f} seconds to run c_tick().")
                     except StopIteration:
                         self.logger().error("Stop iteration triggered in real time mode. This is not expected.")
                         return
