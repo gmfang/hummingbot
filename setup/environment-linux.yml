@@ -34,7 +34,7 @@ dependencies:
   - openssl=1.1.1d=h7b6447c_4
   - pandas=1.0.1=py38h0573a6f_0
   - pip=20.0.2=py_2
-  - prompt_toolkit=3.0.17=py_0
+  - prompt_toolkit=3.0.17=hd3eb1b0_0
   - pygments=2.5.2=py_0
   - pytables=3.6.1=py38h9fd0a39_0
   - python=3.8.2=h9d8adfe_4_cpython
