@@ -71,12 +71,12 @@ async def main():
 
 
 if __name__ == "__main__":
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     chdir_to_data_directory()
     if login_prompt():
         # yappi.set_clock_type("WALL")
         # with yappi.run():
         #     ev_loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
         #     ev_loop.run_until_complete(main())
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         ev_loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
         ev_loop.run_until_complete(main())
