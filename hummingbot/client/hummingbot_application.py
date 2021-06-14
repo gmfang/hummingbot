@@ -64,6 +64,9 @@ class HummingbotApplication(*commands):
         # This is to start fetching trading pairs for auto-complete
         TradingPairFetcher.get_instance()
         self.ev_loop: asyncio.BaseEventLoop = asyncio.get_event_loop()
+        # # Enable main thread debug mode to make sure Callbacks taking longer than 50ms are logged.
+        # self.ev_loop.set_debug(True)
+        # self.ev_loop.slow_callback_duration = 0.001  # 1ms
         self.parser: ThrowingArgumentParser = load_parser(self)
         self.app = HummingbotCLI(
             input_handler=self._handle_command, bindings=load_key_bindings(self), completer=load_completer(self)

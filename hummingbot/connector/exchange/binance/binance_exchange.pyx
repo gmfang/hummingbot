@@ -138,6 +138,9 @@ cdef class BinanceExchange(ExchangeBase):
         self._binance_client = BinanceClient(binance_api_key, binance_api_secret, tld=domain)
         self._user_stream_tracker = BinanceUserStreamTracker(binance_client=self._binance_client, domain=domain)
         self._ev_loop = asyncio.get_event_loop()
+        # # Enable main thread debug mode to make sure Callbacks taking longer than 50ms are logged.
+        # self._ev_loop.set_debug(True)
+        # self._ev_loop.slow_callback_duration = 0.00001  # 1ms
         self._poll_notifier = asyncio.Event()
         self._last_timestamp = 0
         self._in_flight_orders = {}  # Dict[client_order_id:str, BinanceInFlightOrder]
@@ -633,7 +636,8 @@ cdef class BinanceExchange(ExchangeBase):
 
                     if tracked_order is None:
                         # Hiding the messages for now. Root cause to be investigated in later sprints.
-                        self.logger().debug(f"Unrecognized order ID from user stream: {client_order_id}.")
+                        self.logger().debug(
+                            f"Unrecognized order ID from user stream: {client_order_id}. Could not find this order id in local _in_flight_orders.")
                         self.logger().debug(f"Event: {event_message}")
                         continue
 
@@ -1027,6 +1031,7 @@ cdef class BinanceExchange(ExchangeBase):
                                 object price,
                                 object amount,
                                 object order_type):
+        self.logger().info(f"Start tracking order {order_id}.")
         self._in_flight_orders[order_id] = BinanceInFlightOrder(
             client_order_id=order_id,
             exchange_order_id=exchange_order_id,
@@ -1042,6 +1047,7 @@ cdef class BinanceExchange(ExchangeBase):
             del self._in_flight_orders[order_id]
         if order_id in self._order_not_found_records:
             del self._order_not_found_records[order_id]
+        self.logger().info(f"Stop tracking order {order_id}.")
 
     cdef object c_get_order_price_quantum(self, str trading_pair, object price):
         cdef:
