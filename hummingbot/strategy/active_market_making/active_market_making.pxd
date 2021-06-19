@@ -45,6 +45,9 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         object _min_profit_percent
         # Whether the current tick cycle should create buy orders.
         bint _is_buy
+        # Target sell price for the current order. Assuming there's only
+        # one buy-sell transaction at one time.
+        object _target_sell_price
 
     cdef object c_get_mid_price(self)
     cdef object c_create_base_proposal(self, object base_balance,

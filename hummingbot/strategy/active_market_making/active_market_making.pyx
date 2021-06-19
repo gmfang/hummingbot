@@ -114,6 +114,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         self._ping_pong_enabled = ping_pong_enabled
         self._min_profit_percent = min_profit_percent
         self._is_buy = True
+        self._target_sell_price = Decimal('nan')
         try:
             if self._is_debug:
                 os.unlink(self._debug_csv_path)
@@ -389,13 +390,13 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 if self._create_timestamp <= self._current_timestamp:
                     # 1. Get current balance.
                     base_balance, quote_balance = self.c_get_adjusted_available_balance(
-                      self.active_orders)
+                        self.active_orders)
                     # 2. Create a base buy/sell proposal.
                     proposal = self.c_create_base_proposal(base_balance,
-                                                         quote_balance)
+                                                           quote_balance)
                     # 3. Apply budget constraint, i.e. can't buy/sell more than what you have.
                     self.c_apply_budget_constraint(proposal, base_balance,
-                                                 quote_balance)
+                                                   quote_balance)
 
                 self.c_cancel_active_orders()
                 if self._is_debug:
@@ -562,8 +563,10 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             left_hand = ((Decimal(2) * self._min_profit_percent)/ (top_ask_price + top_bid_price) + buy_fee.percent + sell_fee.percent) / (Decimal(1) + buy_fee.percent)
             # The multiplier calculated from spread and desired profit percent.
             gap_multiplier = left_hand / mid_spread
+            mid_price = (top_ask_price + top_bid_price) / Decimal(2)
             # buy price = mid * (1 - mid_spread * gap)
             my_bid_price = ((top_ask_price + top_bid_price) / Decimal(2)) * (Decimal(1) - mid_spread * gap_multiplier)
+            self._target_sell_price = mid_price
 
             size = market.c_quantize_order_amount(self.trading_pair,
                                                   self._order_amount)
@@ -572,28 +575,37 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 self.logger().info(
                     f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
                     f"Current top Ask: {top_ask_price}. Amount: {size}.\n"
-                    f"Mid price: {round((top_ask_price + top_bid_price) / Decimal(2), 5)}.\n"
+                    f"Mid price: {round(mid_price, 5)}.\n"
                     f"Mid Spread Percentage: {round(mid_spread * Decimal(100), 5)}%.\n"
                     f"My Bid price: {round(my_bid_price, 5)}.\n"
+                    f"Target Sell price: {round(self._target_sell_price, 5)}. \n"
                     f"Gap Multiplier: {round(gap_multiplier, 5)}."
                 )
         # Create a sell order
         if base_balance > s_decimal_zero:
-            top_ask_price = self._market_info.get_price_for_volume(
-                True, base_balance).result_price
+            # top_ask_price = self._market_info.get_price_for_volume(
+            #     True, base_balance).result_price
+            # ask_price_quantum = market.c_get_order_price_quantum(
+            #     self.trading_pair,
+            #     self._target_sell_price
+            # )
+            # # Reset the top ask price to below the top ask
+            # top_ask_price = (floor(
+            #     top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
+
             ask_price_quantum = market.c_get_order_price_quantum(
                 self.trading_pair,
-                top_ask_price
+                self._target_sell_price
             )
-            # Reset the top ask price to below the top ask
-            top_ask_price = (floor(
-                top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
-            price = market.c_quantize_order_price(self.trading_pair, Decimal(str(top_ask_price)))
+            my_ask_price =(floor(
+                self._target_sell_price / ask_price_quantum) - 1) * ask_price_quantum
+
+            price = market.c_quantize_order_price(self.trading_pair, Decimal(str(my_ask_price)))
             size = market.c_quantize_order_amount(self.trading_pair, base_balance)
             if size > 0:
                 sells.append(PriceSize(price, size))
                 self.logger().info(
-                    f"Initiate a Sell proposal. Current top Ask: {top_ask_price}. Amount: {size}."
+                    f"Initiate a Sell proposal. Current top Ask: {my_ask_price}. Amount: {size}."
                 )
 
         return Proposal(buys, sells)
@@ -694,20 +706,25 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             list buys = []
             list sells = []
 
-        top_ask_price = self._market_info.get_price(
-            True)
+        # top_ask_price = self._market_info.get_price(
+        #     True)
+        # ask_price_quantum = market.c_get_order_price_quantum(
+        #     self.trading_pair,
+        #     top_ask_price
+        # )
+
         ask_price_quantum = market.c_get_order_price_quantum(
             self.trading_pair,
-            top_ask_price
+            self._target_sell_price
         )
         # Reset the top ask price to below the top ask
-        top_ask_price = (floor(
-            top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
+        my_ask_price = (floor(
+            self._target_sell_price / ask_price_quantum) - 1) * ask_price_quantum
         self.logger().info(
-            f"Initiate an Immediate Sell at (Price, Size): {top_ask_price}, {amount}."
+            f"Initiate an Immediate Sell at (Price, Size): {my_ask_price}, {amount}."
         )
         price = market.c_quantize_order_price(self.trading_pair,
-                                              Decimal(str(top_ask_price)))
+                                              Decimal(str(my_ask_price)))
         size = market.c_quantize_order_amount(self.trading_pair, amount)
         if size > 0:
             sells.append(PriceSize(price, size))
@@ -723,15 +740,15 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         size = market.c_quantize_order_amount(self.trading_pair, amount)
         if self._logging_options & self.OPTION_LOG_CREATE_ORDER:
             self.logger().info(
-                  f"({self.trading_pair}) Creating Immediate Market Sell order for amount: {size}."
-                )
+                f"({self.trading_pair}) Creating Immediate Market Sell order for amount: {size}."
+            )
             order_id = self.c_sell_with_specific_market(
-                    self._market_info,
-                    size,
-                    order_type=OrderType.MARKET,
-                    price=Decimal("nan"),
-                    expiration_seconds=expiration_seconds
-                )
+                self._market_info,
+                size,
+                order_type=OrderType.MARKET,
+                price=Decimal("nan"),
+                expiration_seconds=expiration_seconds
+            )
         # Order created. Set timer properly.
         self.set_timers()
 
@@ -890,7 +907,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
 
     cdef bint c_to_create_orders(self, object proposal):
         return self._create_timestamp < self._current_timestamp and \
-               proposal is not None
+            proposal is not None
 
     cdef c_execute_orders_proposal(self, object proposal):
         cdef:
@@ -925,12 +942,13 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 orders_created = True
         if len(proposal.sells) > 0:
             if self._logging_options & self.OPTION_LOG_CREATE_ORDER:
-                price_quote_str = [f"{sell.size.normalize()} {self.base_asset}, "
-                                   f"{sell.price.normalize()} {self.quote_asset}"
-                                   for sell in proposal.sells]
+                price_quote_str = [
+                    f"{sell.size.normalize()} {self.base_asset}, "
+                    f"{sell.price.normalize()} {self.quote_asset}"
+                    for sell in proposal.sells]
                 self.logger().info(
-                  f"({self.trading_pair}) Creating {len(proposal.sells)} ask "
-                  f"orders at (Size, Price): {price_quote_str}. Balance (Base, Quote): {base_balance}, {quote_balance}."
+                    f"({self.trading_pair}) Creating {len(proposal.sells)} ask "
+                    f"orders at (Size, Price): {price_quote_str}. Balance (Base, Quote): {base_balance}, {quote_balance}."
                 )
             for sell in proposal.sells:
                 ask_order_id = self.c_sell_with_specific_market(
