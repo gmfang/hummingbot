@@ -598,7 +598,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             else:
                 self.logger().info(
                     f"Gap is too tight. Current top Bid: {top_bid_price}. "
-                    f"Current top Ask: {top_ask_price}. Amount: {size}. "
+                    f"Current top Ask: {top_ask_price}."
                 )
         # Create a sell order
         if base_balance > s_decimal_zero:
