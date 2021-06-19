@@ -595,6 +595,11 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                         f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
                         f"Current top Ask: {top_ask_price}. Amount: {size}. "
                     )
+            else:
+                self.logger().info(
+                    f"Gap is too tight. Current top Bid: {top_bid_price}. "
+                    f"Current top Ask: {top_ask_price}. Amount: {size}. "
+                )
         # Create a sell order
         if base_balance > s_decimal_zero:
             top_ask_price = self._market_info.get_price_for_volume(
