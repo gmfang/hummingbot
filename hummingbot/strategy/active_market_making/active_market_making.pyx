@@ -580,21 +580,17 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             #         f"Target Sell price: {round(self._target_sell_price, 5)}. \n"
             #         f"Gap Multiplier: {round(gap_multiplier, 5)}."
             #     )
-            if top_ask_price * (Decimal(1) - sell_fee.percent) / (
-                    top_bid_price * (
-                    Decimal(
-                        1) + buy_fee.percent) + self._min_profit_percent) >= 1.0:
-                price = market.c_quantize_order_price(self.trading_pair,
-                                                      Decimal(
-                                                          str(top_bid_price)))
-                size = market.c_quantize_order_amount(self.trading_pair,
-                                                      self._order_amount)
-                if size > 0:
-                    buys.append(PriceSize(price, size))
-                    self.logger().info(
-                        f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
-                        f"Current top Ask: {top_ask_price}. Amount: {size}. "
-                    )
+            price = market.c_quantize_order_price(self.trading_pair,
+                                                  Decimal(
+                                                      str(top_bid_price)))
+            size = market.c_quantize_order_amount(self.trading_pair,
+                                                  self._order_amount)
+            if size > 0:
+                buys.append(PriceSize(price, size))
+                self.logger().info(
+                    f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
+                    f"Current top Ask: {top_ask_price}. Amount: {size}. "
+                )
         # Create a sell order
         if base_balance > s_decimal_zero:
             top_ask_price = self._market_info.get_price_for_volume(
