@@ -179,6 +179,7 @@ class BinanceAPIOrderBookDataSource(OrderBookTrackerDataSource):
                                     exc_info=True)
                 await asyncio.sleep(30.0)
 
+    # TODO: HAHA this is where we listen for websocket.
     async def listen_for_order_book_diffs(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
         while True:
             try:

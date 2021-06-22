@@ -557,40 +557,40 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             sell_fee = market.c_get_fee(self.base_asset, self.quote_asset,
                                         self._limit_order_type, TradeType.SELL,
                                         self._order_amount, top_ask_price)
-            # # Spread width in percentage from mid price to bid/ask.
-            # mid_spread = (top_ask_price - top_bid_price) / (top_ask_price + top_bid_price)
-            # left_hand = ((Decimal(2) * self._min_profit_percent)/ (top_ask_price + top_bid_price) + buy_fee.percent + sell_fee.percent) / (Decimal(1) + buy_fee.percent)
-            # # The multiplier calculated from spread and desired profit percent.
-            # gap_multiplier = left_hand / mid_spread
-            # mid_price = (top_ask_price + top_bid_price) / Decimal(2)
-            # # buy price = mid * (1 - mid_spread * gap)
-            # my_bid_price = ((top_ask_price + top_bid_price) / Decimal(2)) * (Decimal(1) - mid_spread * gap_multiplier)
+            # Spread width in percentage from mid price to bid/ask.
+            mid_spread = (top_ask_price - top_bid_price) / (top_ask_price + top_bid_price)
+            left_hand = ((Decimal(2) * self._min_profit_percent)/ (top_ask_price + top_bid_price) + buy_fee.percent + sell_fee.percent) / (Decimal(1) + buy_fee.percent)
+            # The multiplier calculated from spread and desired profit percent.
+            gap_multiplier = left_hand / mid_spread
+            mid_price = (top_ask_price + top_bid_price) / Decimal(2)
+            # buy price = mid * (1 - mid_spread * gap)
+            my_bid_price = ((top_ask_price + top_bid_price) / Decimal(2)) * (Decimal(1) - mid_spread * gap_multiplier)
             # self._target_sell_price = mid_price
 
-            # size = market.c_quantize_order_amount(self.trading_pair,
-            #                                       self._order_amount)
-            # if size > 0:
-            #     buys.append(PriceSize(my_bid_price, size))
-            #     self.logger().info(
-            #         f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
-            #         f"Current top Ask: {top_ask_price}. Amount: {size}.\n"
-            #         f"Mid price: {round(mid_price, 5)}.\n"
-            #         f"Mid Spread Percentage: {round(mid_spread * Decimal(100), 5)}%.\n"
-            #         f"My Bid price: {round(my_bid_price, 5)}.\n"
-            #         f"Target Sell price: {round(self._target_sell_price, 5)}. \n"
-            #         f"Gap Multiplier: {round(gap_multiplier, 5)}."
-            #     )
-            price = market.c_quantize_order_price(self.trading_pair,
-                                                  Decimal(
-                                                      str(top_bid_price)))
             size = market.c_quantize_order_amount(self.trading_pair,
                                                   self._order_amount)
             if size > 0:
-                buys.append(PriceSize(price, size))
+                buys.append(PriceSize(my_bid_price, size))
                 self.logger().info(
                     f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
-                    f"Current top Ask: {top_ask_price}. Amount: {size}. "
+                    f"Current top Ask: {top_ask_price}. Amount: {size}.\n"
+                    f"Mid price: {round(mid_price, 5)}.\n"
+                    f"Mid Spread Percentage: {round(mid_spread * Decimal(100), 5)}%.\n"
+                    f"My Bid price: {round(my_bid_price, 5)}.\n"
+                    f"Target Sell price: {round(self._target_sell_price, 5)}. \n"
+                    f"Gap Multiplier: {round(gap_multiplier, 5)}."
                 )
+            price = market.c_quantize_order_price(self.trading_pair,
+                                                  Decimal(
+                                                      str(my_bid_price)))
+            # size = market.c_quantize_order_amount(self.trading_pair,
+            #                                       self._order_amount)
+            # if size > 0:
+            #     buys.append(PriceSize(price, size))
+            #     self.logger().info(
+            #         f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
+            #         f"Current top Ask: {top_ask_price}. Amount: {size}. "
+            #     )
         # Create a sell order
         if base_balance > s_decimal_zero:
             top_ask_price = self._market_info.get_price_for_volume(
