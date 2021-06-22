@@ -601,7 +601,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             )
             # Reset the top ask price to below the top ask
             top_ask_price = (floor(
-                top_ask_price / ask_price_quantum) - 1) * ask_price_quantum
+                top_ask_price / ask_price_quantum) - 3) * ask_price_quantum
             # ask_price_quantum = market.c_get_order_price_quantum(
             #     self.trading_pair,
             #     self._target_sell_price
@@ -721,7 +721,8 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             self.trading_pair,
             top_ask_price
         )
-
+        top_ask_price = (floor(
+            self._target_sell_price / ask_price_quantum) - 3) * ask_price_quantum
         # ask_price_quantum = market.c_get_order_price_quantum(
         #     self.trading_pair,
         #     self._target_sell_price
@@ -729,6 +730,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         # # Reset the top ask price to below the top ask
         # my_ask_price = (floor(
         #     self._target_sell_price / ask_price_quantum) - 1) * ask_price_quantum
+
         self.logger().info(
             f"Initiate an Immediate Sell at (Price, Size): {top_ask_price}, {amount}."
         )

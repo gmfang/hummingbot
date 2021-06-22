@@ -177,7 +177,7 @@ class OrderBookTracker(ABC):
         for index, trading_pair in enumerate(self._trading_pairs):
             self._order_books[trading_pair] = await self._data_source.get_new_order_book(trading_pair)
             self._tracking_message_queues[trading_pair] = asyncio.Queue()
-            # TODO: HAHA start taking message and apply diff for each trade pair order book.
+            # TODO: HAHA start taking websocket message and apply diff for each trade pair order book.
             self._tracking_tasks[trading_pair] = safe_ensure_future(self._track_single_book(trading_pair))
             self.logger().info(f"Initialized order book for {trading_pair}. "
                                f"{index + 1}/{len(self._trading_pairs)} completed.")
