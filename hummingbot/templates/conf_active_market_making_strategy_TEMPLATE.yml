@@ -45,3 +45,5 @@ volatility_buffer_size: 60
 
 # Whether to alternate between buys and sells (true/false).
 ping_pong_enabled: null
+
+vol_to_spread_multiplier: null

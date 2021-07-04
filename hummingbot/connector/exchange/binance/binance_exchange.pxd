@@ -6,6 +6,7 @@ from hummingbot.core.data_type.transaction_tracker cimport TransactionTracker
 cdef class BinanceExchange(ExchangeBase):
     cdef:
         object _user_stream_tracker
+        object _kline_stream_tracker
         object _binance_client
         object _ev_loop
         object _poll_notifier
@@ -20,8 +21,10 @@ cdef class BinanceExchange(ExchangeBase):
         object _data_source_type
         public object _status_polling_task
         public object _user_stream_event_listener_task
+        public object _kline_stream_event_listener_task
         public object _user_stream_tracker_task
         public object _trading_rules_polling_task
+        public object _kline_stream_tracker_task
         object _async_scheduler
         object _set_server_time_offset_task
         object _throttler

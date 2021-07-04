@@ -54,6 +54,7 @@ from hummingbot.core.event.events import (
 from hummingbot.connector.exchange_base import ExchangeBase
 from hummingbot.core.network_iterator import NetworkStatus
 from hummingbot.core.data_type.order_book cimport OrderBook
+from hummingbot.core.data_type.kline cimport Kline
 from hummingbot.core.data_type.cancellation_result import CancellationResult
 from hummingbot.core.data_type.transaction_tracker import TransactionTracker
 from hummingbot.connector.trading_rule cimport TradingRule
@@ -61,6 +62,7 @@ from hummingbot.core.utils.tracking_nonce import get_tracking_nonce
 from hummingbot.core.utils.estimate_fee import estimate_fee
 from .binance_order_book_tracker import BinanceOrderBookTracker
 from .binance_user_stream_tracker import BinanceUserStreamTracker
+from .binance_kline_stream_tracker import BinanceKlineStreamTracker
 from .binance_time import BinanceTime
 from .binance_in_flight_order import BinanceInFlightOrder
 from .binance_utils import (
@@ -68,6 +70,8 @@ from .binance_utils import (
     convert_to_exchange_trading_pair)
 from hummingbot.core.data_type.common import OpenOrder
 from hummingbot.core.data_type.trade import Trade
+import datetime
+
 s_logger = None
 s_decimal_0 = Decimal(0)
 s_decimal_NaN = Decimal("nan")
@@ -137,6 +141,7 @@ cdef class BinanceExchange(ExchangeBase):
         self._order_book_tracker = BinanceOrderBookTracker(trading_pairs=trading_pairs, domain=domain)
         self._binance_client = BinanceClient(binance_api_key, binance_api_secret, tld=domain)
         self._user_stream_tracker = BinanceUserStreamTracker(binance_client=self._binance_client, domain=domain)
+        self._kline_stream_tracker = BinanceKlineStreamTracker(trading_pairs=trading_pairs, domain=domain)
         self._ev_loop = asyncio.get_event_loop()
         # # Enable main thread debug mode to make sure Callbacks taking longer than 50ms are logged.
         # self._ev_loop.set_debug(True)
@@ -150,7 +155,10 @@ cdef class BinanceExchange(ExchangeBase):
         self._trade_fees = {}  # Dict[trading_pair:str, (maker_fee_percent:Decimal, taken_fee_percent:Decimal)]
         self._last_update_trade_fees_timestamp = 0
         self._status_polling_task = None
+        self._user_stream_tracker_task = None
         self._user_stream_event_listener_task = None
+        self._kline_stream_tracker_task = None
+        self._kline_stream_event_listener_task = None
         self._trading_rules_polling_task = None
         self._async_scheduler = AsyncCallScheduler(call_interval=0.5)
         self._last_poll_timestamp = 0
@@ -200,6 +208,10 @@ cdef class BinanceExchange(ExchangeBase):
     @property
     def user_stream_tracker(self) -> BinanceUserStreamTracker:
         return self._user_stream_tracker
+
+    @property
+    def kline_stream_tracker(self) -> BinanceKlineStreamTracker:
+        return self._kline_stream_tracker
 
     def restore_tracking_states(self, saved_states: Dict[str, any]):
         self._in_flight_orders.update({
@@ -716,6 +728,53 @@ cdef class BinanceExchange(ExchangeBase):
                 self.logger().error("Unexpected error in user stream listener loop.", exc_info=True)
                 await asyncio.sleep(5.0)
 
+    async def _iter_kline_event_queue(self) -> AsyncIterable[Dict[str, any]]:
+        while True:
+            try:
+                yield await self._kline_stream_tracker.kline_stream.get()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.logger().network(
+                    "Unknown error. Retrying after 1 seconds.",
+                    exc_info=True,
+                    app_warning_msg="Could not fetch Kline events from Binance. Check API key and network connection."
+                )
+                await asyncio.sleep(1.0)
+
+    async def _kline_stream_event_listener(self):
+        async for event_message in self._iter_kline_event_queue():
+            try:
+                event_type = event_message["e"]
+                if event_type == "kline":
+                    if event_message["k"]["x"] is not True:
+                        # Skip this ongoing kline message -  We only care
+                        # about the closed ones.
+                        continue
+
+                    price_open = Decimal(event_message["k"]["o"])
+                    price_high = Decimal(event_message["k"]["h"])
+                    price_low = Decimal(event_message["k"]["l"])
+                    price_close = Decimal(event_message["k"]["c"])
+
+                    kline = Kline(price_open, price_high, price_low, price_close)
+
+                    t = time.localtime()
+                    current_time = time.strftime("%H:%M:%S", t)
+                    kline_start_time = datetime.datetime.fromtimestamp(int(event_message["k"]["t"])/1000).strftime('%H:%M:%S')
+                    kline_end_time = datetime.datetime.fromtimestamp(int(event_message["k"]["T"])/1000).strftime('%H:%M:%S')
+                    self.logger().info(f"Received closed kline. Current time {current_time}. Kline start time: {kline_start_time} Kline close time: {kline_end_time}. Close price: {price_close}")
+
+                    self._kline_stream_tracker.add_kline(kline)
+                    # self.logger().info(f"Klines now are: {self._kline_stream_tracker.klines}")
+                    self._kline_stream_tracker.calc_tech_indicators()
+
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.logger().error("Unexpected error in kline stream listener loop.", exc_info=True)
+                await asyncio.sleep(5.0)
+
     # TODO: this gets run every tick as well!
     async def _status_polling_loop(self):
         while True:
@@ -787,6 +846,8 @@ cdef class BinanceExchange(ExchangeBase):
             self._status_polling_task = safe_ensure_future(self._status_polling_loop())
             self._user_stream_tracker_task = safe_ensure_future(self._user_stream_tracker.start())
             self._user_stream_event_listener_task = safe_ensure_future(self._user_stream_event_listener())
+            self._kline_stream_tracker_task = safe_ensure_future(self._kline_stream_tracker.start())
+            self._kline_stream_event_listener_task = safe_ensure_future(self._kline_stream_event_listener())
 
     def _stop_network(self):
         self._order_book_tracker.stop()
@@ -798,8 +859,12 @@ cdef class BinanceExchange(ExchangeBase):
             self._user_stream_event_listener_task.cancel()
         if self._trading_rules_polling_task is not None:
             self._trading_rules_polling_task.cancel()
+        if self._kline_stream_tracker_task is not None:
+            self._kline_stream_tracker_task.cancel()
+        if self._kline_stream_event_listener_task is not None:
+            self._kline_stream_event_listener_task.cancel()
         self._status_polling_task = self._user_stream_tracker_task = \
-            self._user_stream_event_listener_task = None
+            self._user_stream_event_listener_task = self._kline_stream_tracker_task = self._kline_stream_event_listener_task = None
 
     async def stop_network(self):
         self._stop_network()

@@ -48,6 +48,8 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         # Target sell price for the current order. Assuming there's only
         # one buy-sell transaction at one time.
         object _target_sell_price
+        object _vol_to_spread_multiplier
+        bint _upward_trend
 
     cdef object c_get_mid_price(self)
     cdef object c_create_base_proposal(self, object base_balance,

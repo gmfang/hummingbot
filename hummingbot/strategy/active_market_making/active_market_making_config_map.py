@@ -108,9 +108,10 @@ active_market_making_config_map = {
     "min_profit_percent":
         ConfigVar(key="min_profit_percent",
                   prompt="Enter the minimum profitability percent of total order amount required to init a trade"
-                     "(Enter 0.1 to indicate 0.1%) >>> ",
+                         "(Enter 0.1 to indicate 0.1%) >>> ",
                   type_str="decimal",
-                  validator=lambda v: validate_decimal(v, 0, 100, inclusive=True),
+                  validator=lambda v: validate_decimal(v, 0, 100,
+                                                       inclusive=True),
                   prompt_on_new=True),
     "closing_time":
         ConfigVar(key="closing_time",
@@ -168,7 +169,7 @@ active_market_making_config_map = {
         ConfigVar(key="volatility_buffer_size",
                   prompt="Enter amount of ticks that will be stored to calculate volatility>>> ",
                   type_str="int",
-                  validator=lambda v: validate_decimal(v, 5, 600),
+                  validator=lambda v: validate_decimal(v, 0, 2400),
                   default=60),
     "ping_pong_enabled":
         ConfigVar(key="ping_pong_enabled",
@@ -177,4 +178,12 @@ active_market_making_config_map = {
                   default=True,
                   prompt_on_new=True,
                   validator=validate_bool),
+    "vol_to_spread_multiplier":
+        ConfigVar(key="vol_to_spread_multiplier",
+                  prompt="Enter the Volatility threshold multiplier: "
+                         "(If market volatility multiplied by this value is above the minimum spread, it will increase the minimum and maximum spread value) >>>",
+                  type_str="decimal",
+                  validator=lambda v: validate_decimal(v, 0, 100,
+                                                       inclusive=True),
+                  prompt_on_new=True),
 }

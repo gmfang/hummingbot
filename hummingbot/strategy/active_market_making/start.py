@@ -27,6 +27,7 @@ def start(self):
         order_refresh_tolerance_pct = c_map.get("order_refresh_tolerance_pct").value / Decimal('100')
         add_transaction_costs_to_orders = c_map.get("add_transaction_costs").value
         ping_pong_enabled = c_map.get("ping_pong_enabled").value
+        vol_to_spread_multiplier = c_map.get("vol_to_spread_multiplier").value
 
         trading_pair: str = raw_trading_pair
         maker_assets: Tuple[str, str] = self._initialize_market_assets(exchange, [trading_pair])[0]
@@ -59,6 +60,7 @@ def start(self):
             debug_csv_path=debug_csv_path,
             volatility_buffer_size=volatility_buffer_size,
             is_debug=False,
+            vol_to_spread_multiplier=vol_to_spread_multiplier,
             ping_pong_enabled=ping_pong_enabled,
             min_profit_percent=min_profit_percent,
         )
