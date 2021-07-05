@@ -716,9 +716,10 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             size = market.c_quantize_order_amount(self.trading_pair, base_balance)
 
             sells.append(PriceSize(price, size))
-            self.logger().info(
-                f"Initiate a Sell proposal. Current top Ask: {top_ask_price}. Amount: {size}."
-            )
+            if size > 0:
+                self.logger().info(
+                    f"Initiate a Sell proposal. Current top Ask: {top_ask_price}. Amount: {size}."
+                )
 
         return Proposal(buys, sells)
 
