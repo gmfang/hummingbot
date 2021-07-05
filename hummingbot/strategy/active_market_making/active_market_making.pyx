@@ -610,7 +610,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
 
         # Create a buy order
         if self._is_buy and self._upward_trend and not self._histogram_retrace:
-            # Check if there's opportunity to create a buy order.
             top_bid_price = self._market_info.get_price_for_volume(
                 False, self._order_amount).result_price
             bid_price_quantum = market.c_get_order_price_quantum(
@@ -658,20 +657,19 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             # self._target_sell_price = (my_bid_price * (
             #             Decimal(1) + buy_fee.percent)) / (Decimal(
             #     1) - sell_fee.percent - self._min_profit_percent / Decimal(100))
-            if size > 0:
-                buys.append(PriceSize(my_bid_price, size))
-                self.logger().info(
-                    f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
-                    f"Current top Ask: {top_ask_price}. Amount: {size}.\n"
-                    f"Mid price: {round(mid_price, 5)}.\n"
-                    # f"Mid Spread Percentage: {round(mid_spread * Decimal(100), 5)}%.\n"
-                    f"My Bid price: {round(my_bid_price, 5)}.\n"
-                    f"My Spread: {round(my_bid_spread * 100, 5)}%\n"
-                    # f"Spread After Adj: {round(my_bid_spread * spread_inflation_due_to_volatility, 5)}%\n"
-                    # f"Volatility: {round(volatility,5)}\n"
-                    # f"Spread Inflation: {round(spread_inflation_due_to_volatility, 5)}"
-                    # f"Target Sell price: {round(self._target_sell_price, 5)}.\n"
-                )
+            buys.append(PriceSize(my_bid_price, size))
+            self.logger().info(
+                f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
+                f"Current top Ask: {top_ask_price}. Amount: {size}.\n"
+                f"Mid price: {round(mid_price, 5)}.\n"
+                # f"Mid Spread Percentage: {round(mid_spread * Decimal(100), 5)}%.\n"
+                f"My Bid price: {round(my_bid_price, 5)}.\n"
+                f"My Spread: {round(my_bid_spread * 100, 5)}%\n"
+                # f"Spread After Adj: {round(my_bid_spread * spread_inflation_due_to_volatility, 5)}%\n"
+                # f"Volatility: {round(volatility,5)}\n"
+                # f"Spread Inflation: {round(spread_inflation_due_to_volatility, 5)}"
+                # f"Target Sell price: {round(self._target_sell_price, 5)}.\n"
+            )
             # size = market.c_quantize_order_amount(self.trading_pair,
             #                                       self._order_amount)
             # if size > 0:
@@ -716,11 +714,11 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
 
             price = market.c_quantize_order_price(self.trading_pair, Decimal(str(top_ask_price)))
             size = market.c_quantize_order_amount(self.trading_pair, base_balance)
-            if size > 0:
-                sells.append(PriceSize(price, size))
-                self.logger().info(
-                    f"Initiate a Sell proposal. Current top Ask: {top_ask_price}. Amount: {size}."
-                )
+
+            sells.append(PriceSize(price, size))
+            self.logger().info(
+                f"Initiate a Sell proposal. Current top Ask: {top_ask_price}. Amount: {size}."
+            )
 
         return Proposal(buys, sells)
 
