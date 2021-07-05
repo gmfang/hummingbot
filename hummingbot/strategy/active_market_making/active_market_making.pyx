@@ -118,6 +118,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         self._is_buy = True
         self._target_sell_price = Decimal('nan')
         self._upward_trend = False
+        self._histogram_retrace = False
         try:
             if self._is_debug:
                 os.unlink(self._debug_csv_path)
@@ -394,15 +395,32 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 if self._create_timestamp <= self._current_timestamp:
                     ema_short = market.kline_stream_tracker.ema_short
                     ema_long = market.kline_stream_tracker.ema_long
-                    macd_histogram = market.kline_stream_tracker.macd_histogram
-                    if macd_histogram > 0:
+                    macd_histograms = market.kline_stream_tracker.macd_histograms
+                    third_hist = round(macd_histograms[-3], 6)
+                    second_hist = round(macd_histograms[-2], 6)
+                    last_hist = round(macd_histograms[-1], 6)
+                    if third_hist < second_hist < last_hist:
                         self._upward_trend = True
+                        self._histogram_retrace = False
                         self.logger().info(
-                            f"Upward Trending. EMA short: {ema_short}, EMA long {ema_long} MACD Histogram: {macd_histogram}")
+                            f"Upward Trending. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
                     else:
+                        self._histogram_retrace = True
+                        self.logger().info(
+                            f"Histogram Retrace Detected. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
+
+                    if third_hist > second_hist > last_hist:
                         self._upward_trend = False
                         self.logger().info(
-                            f"Downward Trending. EMA short: {ema_short}, EMA long {ema_long} MACD Histogram: {macd_histogram}")
+                            f"Downward Trending. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
+                    # if macd_histogram > 0:
+                    #     self._upward_trend = True
+                    #     self.logger().info(
+                    #         f"Upward Trending. EMA short: {ema_short}, EMA long {ema_long} MACD Histogram: {macd_histogram}")
+                    # else:
+                    #     self._upward_trend = False
+                    #     self.logger().info(
+                    #         f"Downward Trending. EMA short: {ema_short}, EMA long {ema_long} MACD Histogram: {macd_histogram}")
                     # 1. Get current balance.
                     base_balance, quote_balance = self.c_get_adjusted_available_balance(
                         self.active_orders)
@@ -591,7 +609,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         #         )
 
         # Create a buy order
-        if self._is_buy and self._upward_trend:
+        if self._is_buy and self._upward_trend and not self._histogram_retrace:
             # Check if there's opportunity to create a buy order.
             top_bid_price = self._market_info.get_price_for_volume(
                 False, self._order_amount).result_price

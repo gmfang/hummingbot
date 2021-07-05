@@ -39,7 +39,7 @@ class KlineStreamTracker(ABC):
         self._klines: Deque[Kline] = deque([], maxlen=200)
         self._ema_short = float("Nan")
         self._ema_long = float("Nan")
-        self._macd_histogram = float("Nan")
+        self._macd_histograms: List[float] = []
 
     @property
     @abstractmethod
@@ -67,8 +67,8 @@ class KlineStreamTracker(ABC):
         return self._ema_long
 
     @property
-    def macd_histogram(self) -> float:
-        return self._macd_histogram
+    def macd_histograms(self) -> List[float]:
+        return self._macd_histograms
 
     @property
     def klines(self) -> List[Kline]:
@@ -89,7 +89,9 @@ class KlineStreamTracker(ABC):
 
         self._ema_short = ema_short[-1]
         self._ema_long = ema_long[-1]
-        self._macd_histogram = macd[-1][-1]
+        # MACD output 3 lists. We only need last list(histogram). We only
+        # copy the last 10 histograms.
+        self._macd_histograms = macd[-1][-10:]
 
         self.logger().info(
-            f"(Classic) EMA_7 is {self._ema_short}, EMA_20 is {self._ema_long}, MACD(7, 20, 9) Histogram is {self._macd_histogram}")
+            f"(Classic) EMA_7 is {self._ema_short}, EMA_20 is {self._ema_long}, MACD(7, 20, 9) Histogram is {macd[-1][-1]} Histogram list is {self._macd_histograms}")

@@ -50,6 +50,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         object _target_sell_price
         object _vol_to_spread_multiplier
         bint _upward_trend
+        bint _histogram_retrace
 
     cdef object c_get_mid_price(self)
     cdef object c_create_base_proposal(self, object base_balance,
