@@ -413,6 +413,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                         self._upward_trend = False
                         self.logger().info(
                             f"Downward Trending. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
+                    self.logger().info(f"InFlightOrders: {market.in_flight_orders()}")
                     # 1. Get current balance.
                     base_balance, quote_balance = self.c_get_adjusted_available_balance(
                         self.active_orders)

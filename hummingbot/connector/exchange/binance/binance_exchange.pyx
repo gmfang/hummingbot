@@ -282,7 +282,7 @@ cdef class BinanceExchange(ExchangeBase):
             self._account_available_balances[asset_name] = free_balance
             self._account_balances[asset_name] = total_balance
             remote_asset_names.add(asset_name)
-        self.logger().info(f"Updated Balance. Current Acct Free Balance: {self._account_available_balances}")
+        self.logger().info(f"(Polling) Balance Updated.")
 
         asset_names_to_remove = local_asset_names.difference(remote_asset_names)
         for asset_name in asset_names_to_remove:
@@ -716,6 +716,7 @@ cdef class BinanceExchange(ExchangeBase):
 
                 elif event_type == "outboundAccountPosition":
                     balances = event_message["B"]
+                    self.logger().info(f"Received Websocket Acct Balance update. Balances: {balances}")
                     for balance_entry in balances:
                         asset_name = balance_entry["a"]
                         free_balance = Decimal(balance_entry["f"])
