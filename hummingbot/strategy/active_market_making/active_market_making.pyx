@@ -1038,7 +1038,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                     for sell in proposal.sells]
                 self.logger().info(
                     f"({self.trading_pair}) Creating {len(proposal.sells)} ask "
-                    f"orders at (Size, Price): {price_quote_str}. Balance (Base, Quote): {base_balance}, {quote_balance}."
+                    f"orders at (Size, Price): {price_quote_str}."
                 )
             for sell in proposal.sells:
                 ask_order_id = self.c_sell_with_specific_market(
