@@ -115,7 +115,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         self._vol_to_spread_multiplier = vol_to_spread_multiplier
         self._ping_pong_enabled = ping_pong_enabled
         self._min_profit_percent = min_profit_percent
-        self._is_buy = True
+        self._is_buy = False
         self._target_sell_price = Decimal('nan')
         self._upward_trend = False
         self._histogram_retrace = False
@@ -413,21 +413,15 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                         self._upward_trend = False
                         self.logger().info(
                             f"Downward Trending. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
-                    # if macd_histogram > 0:
-                    #     self._upward_trend = True
-                    #     self.logger().info(
-                    #         f"Upward Trending. EMA short: {ema_short}, EMA long {ema_long} MACD Histogram: {macd_histogram}")
-                    # else:
-                    #     self._upward_trend = False
-                    #     self.logger().info(
-                    #         f"Downward Trending. EMA short: {ema_short}, EMA long {ema_long} MACD Histogram: {macd_histogram}")
                     # 1. Get current balance.
                     base_balance, quote_balance = self.c_get_adjusted_available_balance(
                         self.active_orders)
-                    # 2. Create a base buy/sell proposal.
+                    # 2. Decide whether we should buy based on target base pct.
+                    self.c_decide_buy_or_sell()
+                    # 3. Create a base buy/sell proposal.
                     proposal = self.c_create_base_proposal(base_balance,
                                                            quote_balance)
-                    # 3. Apply budget constraint, i.e. can't buy/sell more than what you have.
+                    # 4. Apply budget constraint, i.e. can't buy/sell more than what you have.
                     self.c_apply_budget_constraint(proposal, base_balance,
                                                    quote_balance)
 
@@ -483,7 +477,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 vol = Decimal(str(self.c_get_spread() / 2))
         return vol
 
-    cdef object c_calculate_target_inventory(self):
+    cdef c_decide_buy_or_sell(self):
         cdef:
             ExchangeBase market = self._market_info.market
             str trading_pair = self._market_info.trading_pair
@@ -499,8 +493,21 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         quote_asset_amount = market.get_balance(quote_asset)
         base_value = base_asset_amount * price
         inventory_value = base_value + quote_asset_amount
-        target_inventory_value = inventory_value * self._inventory_target_base_pct
-        return market.c_quantize_order_amount(trading_pair, Decimal(str(target_inventory_value / price)))
+        current_base_percentage = base_value / inventory_value
+        if current_base_percentage < self._inventory_target_base_pct:
+            self.logger().info(f"Base Percentage: "
+                               f"{round(current_base_percentage * Decimal('100'), 3)}%, "
+                               f"Target Percentage: "
+                               f"{round(self._inventory_target_base_pct * Decimal('100'), 3)}%. "
+                               f"Buying.")
+            self._is_buy = True
+        else:
+            self.logger().info(f"Base Percentage: "
+                               f"{round(current_base_percentage * Decimal('100'), 3)}%, "
+                               f"Target Percentage: "
+                               f"{round(self._inventory_target_base_pct * Decimal('100'), 3)}%. "
+                               f"Stop Buying.")
+            self._is_buy = False
 
     cdef bint c_is_algorithm_ready(self):
         return self._avg_vol.is_sampling_buffer_full
@@ -510,51 +517,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             ExchangeBase market = self._market_info.market
             list buys = []
             list sells = []
-
-        # # Create a buy order
-        # if self._is_buy:
-        #     # Check if there's opportunity to create a buy order.
-        #     top_bid_price = self._market_info.get_price_for_volume(
-        #         False, self._order_amount).result_price
-        #     bid_price_quantum = market.c_get_order_price_quantum(
-        #         self.trading_pair,
-        #         top_bid_price
-        #     )
-        #     # Reset the top bid price 1 basis point above the top bid
-        #     top_bid_price = (ceil(top_bid_price / bid_price_quantum) + 1) * bid_price_quantum
-        #
-        #     buy_fee = market.c_get_fee(self.base_asset, self.quote_asset,
-        #                                OrderType.LIMIT, TradeType.BUY,
-        #                                self._order_amount, top_bid_price)
-        #
-        #     top_ask_price = self._market_info.get_price_for_volume(
-        #         True, self._order_amount).result_price
-        #     ask_price_quantum = market.c_get_order_price_quantum(
-        #         self.trading_pair,
-        #         top_ask_price
-        #     )
-        #     # Reset the top ask price to 3 basis point below the top ask
-        #     top_ask_price = (floor(
-        #         top_ask_price / ask_price_quantum) - 3) * ask_price_quantum
-        #     sell_fee = market.c_get_fee(self.base_asset, self.quote_asset,
-        #                                 self._limit_order_type, TradeType.SELL,
-        #                                 self._order_amount, top_ask_price)
-        #
-        #     if top_ask_price * (Decimal(1) - sell_fee.percent) / (
-        #             top_bid_price * (
-        #             Decimal(
-        #                 1) + buy_fee.percent) + self._min_profit_percent) >= 1.0:
-        #         price = market.c_quantize_order_price(self.trading_pair,
-        #                                               Decimal(
-        #                                                   str(top_bid_price)))
-        #         size = market.c_quantize_order_amount(self.trading_pair,
-        #                                               self._order_amount)
-        #         if size > 0:
-        #             buys.append(PriceSize(price, size))
-        #             self.logger().info(
-        #                 f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
-        #                 f"Current top Ask: {top_ask_price}. Amount: {size}. "
-        #             )
         # # Create a buy order
         # if self._is_buy:
         #     # Check if there's opportunity to create a buy order.
@@ -657,19 +619,20 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             # self._target_sell_price = (my_bid_price * (
             #             Decimal(1) + buy_fee.percent)) / (Decimal(
             #     1) - sell_fee.percent - self._min_profit_percent / Decimal(100))
-            buys.append(PriceSize(my_bid_price, size))
-            self.logger().info(
-                f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
-                f"Current top Ask: {top_ask_price}. Amount: {size}.\n"
-                f"Mid price: {round(mid_price, 5)}.\n"
-                # f"Mid Spread Percentage: {round(mid_spread * Decimal(100), 5)}%.\n"
-                f"My Bid price: {round(my_bid_price, 5)}.\n"
-                f"My Spread: {round(my_bid_spread * 100, 5)}%\n"
-                # f"Spread After Adj: {round(my_bid_spread * spread_inflation_due_to_volatility, 5)}%\n"
-                # f"Volatility: {round(volatility,5)}\n"
-                # f"Spread Inflation: {round(spread_inflation_due_to_volatility, 5)}"
-                # f"Target Sell price: {round(self._target_sell_price, 5)}.\n"
-            )
+            if size > 0:
+                buys.append(PriceSize(my_bid_price, size))
+                self.logger().info(
+                    f"Initiate a Buy proposal. Current top Bid: {top_bid_price}. "
+                    f"Current top Ask: {top_ask_price}. Amount: {size}.\n"
+                    f"Mid price: {round(mid_price, 5)}.\n"
+                    # f"Mid Spread Percentage: {round(mid_spread * Decimal(100), 5)}%.\n"
+                    f"My Bid price: {round(my_bid_price, 5)}.\n"
+                    f"My Spread: {round(my_bid_spread * 100, 5)}%\n"
+                    # f"Spread After Adj: {round(my_bid_spread * spread_inflation_due_to_volatility, 5)}%\n"
+                    # f"Volatility: {round(volatility,5)}\n"
+                    # f"Spread Inflation: {round(spread_inflation_due_to_volatility, 5)}"
+                    # f"Target Sell price: {round(self._target_sell_price, 5)}.\n"
+                )
             # size = market.c_quantize_order_amount(self.trading_pair,
             #                                       self._order_amount)
             # if size > 0:
@@ -714,9 +677,8 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
 
             price = market.c_quantize_order_price(self.trading_pair, Decimal(str(top_ask_price)))
             size = market.c_quantize_order_amount(self.trading_pair, base_balance)
-
-            sells.append(PriceSize(price, size))
             if size > 0:
+                sells.append(PriceSize(price, size))
                 self.logger().info(
                     f"Initiate a Sell proposal. Current top Ask: {top_ask_price}. Amount: {size}."
                 )
@@ -733,12 +695,18 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             object base_balance = market.c_get_available_balance(self.base_asset)
             object quote_balance = market.c_get_available_balance(self.quote_asset)
 
+        self.logger().info(f"Current Balance: \n"
+                           f"{self.base_asset}: {base_balance}\n"
+                           f"{self.quote_asset}: {quote_balance}")
+        self.logger().info(f"Active orders: {orders}")
         for order in orders:
             if order.is_buy:
                 quote_balance += order.quantity * order.price
             else:
                 base_balance += order.quantity
-
+        self.logger().info(f"Adjusted Balance: \n"
+                           f"{self.base_asset}: {base_balance}\n"
+                           f"{self.quote_asset}: {quote_balance}")
         return base_balance, quote_balance
 
     cdef c_apply_budget_constraint(self, object proposal, object base_balance, object quote_balance):
@@ -770,8 +738,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                     f"Remove Buy order of (Price, Size) ({buy.price}, {buy.size}) because it less than minimum amount."
                 )
                 buy.size = s_decimal_zero
-                # Switch current mode to sell.
-                self._is_buy = False
 
         proposal.buys = [o for o in proposal.buys if o.size > 0]
 
@@ -794,8 +760,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                     f"Remove Sell order of (Price, Size) ({sell.price}, {sell.size}) because it less than minimum amount."
                 )
                 sell.size = s_decimal_zero
-                # Switch current mode to buy.
-                self._is_buy = True
 
         proposal.sells = [o for o in proposal.sells if o.size > 0]
 
@@ -878,17 +842,23 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         cdef:
             str order_id = order_filled_event.order_id
             object market_info = self._sb_order_tracker.c_get_shadow_market_pair_from_order_id(order_id)
-            tuple order_fill_record
 
         if market_info is not None:
             limit_order_record = self._sb_order_tracker.c_get_shadow_limit_order(order_id)
             order_fill_record = (limit_order_record, order_filled_event)
+
+            clock_timestamp = pd.Timestamp(self._current_timestamp, unit="s",
+                                           tz="America/New_York")
 
             if order_filled_event.trade_type is TradeType.BUY:
                 if self._logging_options & self.OPTION_LOG_MAKER_ORDER_FILLED:
                     self.logger().info(
                         f"({market_info.trading_pair}) Maker buy order of "
                         f"{order_filled_event.amount} {market_info.base_asset} filled."
+                    )
+                    self.notify_hb_app(
+                        f"{clock_timestamp.strftime('%m/%d, %H:%M:%S')} - BUY order {order_filled_event.amount} {market_info.base_asset} @ "
+                        f"{order_filled_event.amount} {market_info.quote_asset} is filled."
                     )
                     # Sell the amount immediately.
                     trade_fee_amount = s_decimal_zero
@@ -907,6 +877,10 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                         f"({market_info.trading_pair}) Maker sell order of "
                         f"{order_filled_event.amount} {market_info.base_asset} filled."
                     )
+                    self.notify_hb_app(
+                        f"{clock_timestamp.strftime('%m/%d, %H:%M:%S')} - SELL order {order_filled_event.amount} {market_info.base_asset} @ "
+                        f"{order_filled_event.amount} {market_info.quote_asset} is filled."
+                    )
 
     cdef c_did_complete_buy_order(self, object order_completed_event):
         cdef:
@@ -923,8 +897,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         # TODO: remove this counter since its obsolete.
         self._filled_buys_balance += 1
         self._last_own_trade_price = limit_order_record.price
-
-        self._is_buy = False
 
         clock_timestamp = pd.Timestamp(self._current_timestamp, unit="s", tz="America/New_York")
 
@@ -955,7 +927,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
         self._filled_sells_balance += 1
         self._last_own_trade_price = limit_order_record.price
 
-        self._is_buy = True
         clock_timestamp = pd.Timestamp(self._current_timestamp, unit="s", tz="America/New_York")
 
         self.log_with_clock(
@@ -1041,9 +1012,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             str bid_order_id, ask_order_id
             bint orders_created = False
 
-        # TODO: consider whether we need this.
-        base_balance, quote_balance = self.c_get_adjusted_available_balance(self.active_orders)
-
         if len(proposal.buys) > 0:
             if self._logging_options & self.OPTION_LOG_CREATE_ORDER:
                 price_quote_str = [f"{buy.size.normalize()} {self.base_asset}, "
@@ -1051,7 +1019,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                                    for buy in proposal.buys]
                 self.logger().info(
                     f"({self.trading_pair}) Creating {len(proposal.buys)} bid orders "
-                    f"at (Size, Price): {price_quote_str}. Balance (Base, Quote): {base_balance}, {quote_balance}."
+                    f"at (Size, Price): {price_quote_str}."
                 )
             for buy in proposal.buys:
                 bid_order_id = self.c_buy_with_specific_market(
@@ -1119,7 +1087,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                                        'optimal_bid_to_mid_%',
                                        'optimal_ask_to_mid_%',
                                        'current_inv',
-                                       'target_inv',
                                        'time_left_fraction',
                                        'mid_price std_dev',
                                        'current_vol_to_calculation_vol',
@@ -1134,7 +1101,6 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                             (mid_price - (self._reserved_price - self._optimal_spread / 2)) / mid_price,
                             ((self._reserved_price + self._optimal_spread / 2) - mid_price) / mid_price,
                             market.get_balance(self.base_asset),
-                            self.c_calculate_target_inventory(),
                             self._time_left / self._closing_time,
                             self._avg_vol.current_value,
                             self.volatility_diff_from_last_parameter_calculation(self.get_volatility()),

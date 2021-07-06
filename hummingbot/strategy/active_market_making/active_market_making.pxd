@@ -69,7 +69,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
     cdef double c_get_spread(self)
     cdef c_collect_market_variables(self, double timestamp)
     cdef bint c_is_algorithm_ready(self)
-    cdef object c_calculate_target_inventory(self)
+    cdef c_decide_buy_or_sell(self)
     cdef c_apply_ping_pong(self, object proposal)
     cdef object c_create_sell_proposal(self, object amount)
     cdef c_immediate_market_sell(self, object amount)
