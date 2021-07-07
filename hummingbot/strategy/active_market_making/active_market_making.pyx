@@ -413,7 +413,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                         self._upward_trend = False
                         self.logger().info(
                             f"Downward Trending. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
-                    self.logger().info(f"InFlightOrders: {market.in_flight_orders()}")
+                    self.logger().info(f"InFlightOrders: {market.in_flight_orders}")
                     # 1. Get current balance.
                     base_balance, quote_balance = self.c_get_adjusted_available_balance(
                         self.active_orders)
@@ -696,8 +696,8 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             object base_balance = market.c_get_available_balance(self.base_asset)
             object quote_balance = market.c_get_available_balance(self.quote_asset)
 
-        self.logger().info(f"Current Balance: \n"
-                           f"{self.base_asset}: {base_balance}\n"
+        self.logger().info(f"Current Balance: "
+                           f"{self.base_asset}: {base_balance} "
                            f"{self.quote_asset}: {quote_balance}")
         self.logger().info(f"Active orders: {orders}")
         for order in orders:
@@ -705,8 +705,8 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                 quote_balance += order.quantity * order.price
             else:
                 base_balance += order.quantity
-        self.logger().info(f"Adjusted Balance: \n"
-                           f"{self.base_asset}: {base_balance}\n"
+        self.logger().info(f"Adjusted Balance: "
+                           f"{self.base_asset}: {base_balance} "
                            f"{self.quote_asset}: {quote_balance}")
         return base_balance, quote_balance
 
@@ -859,7 +859,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                     )
                     self.notify_hb_app(
                         f"{clock_timestamp.strftime('%m/%d, %H:%M:%S')} - BUY order {order_filled_event.amount} {market_info.base_asset} @ "
-                        f"{order_filled_event.amount} {market_info.quote_asset} is filled."
+                        f"{order_filled_event.price} {market_info.quote_asset} is filled."
                     )
                     # Sell the amount immediately.
                     trade_fee_amount = s_decimal_zero
@@ -880,7 +880,7 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                     )
                     self.notify_hb_app(
                         f"{clock_timestamp.strftime('%m/%d, %H:%M:%S')} - SELL order {order_filled_event.amount} {market_info.base_asset} @ "
-                        f"{order_filled_event.amount} {market_info.quote_asset} is filled."
+                        f"{order_filled_event.price} {market_info.quote_asset} is filled."
                     )
 
     cdef c_did_complete_buy_order(self, object order_completed_event):
@@ -908,10 +908,10 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             f"{limit_order_record.price} {limit_order_record.quote_currency}) has been completely filled."
         )
 
-        self.notify_hb_app(
-            f"{clock_timestamp.strftime('%m/%d, %H:%M:%S')} - Maker BUY order {limit_order_record.quantity} {limit_order_record.base_currency} @ "
-            f"{limit_order_record.price} {limit_order_record.quote_currency} is filled."
-        )
+        # self.notify_hb_app(
+        #     f"{clock_timestamp.strftime('%m/%d, %H:%M:%S')} - Maker BUY order {limit_order_record.quantity} {limit_order_record.base_currency} @ "
+        #     f"{limit_order_record.price} {limit_order_record.quote_currency} is filled."
+        # )
 
     cdef c_did_complete_sell_order(self, object order_completed_event):
         cdef:
@@ -936,10 +936,10 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             f"({limit_order_record.quantity} {limit_order_record.base_currency} @ "
             f"{limit_order_record.price} {limit_order_record.quote_currency}) has been completely filled."
         )
-        self.notify_hb_app(
-            f"{clock_timestamp.strftime('%m/%d, %H:%M:%S')} - Maker SELL order {limit_order_record.quantity} {limit_order_record.base_currency} @ "
-            f"{limit_order_record.price} {limit_order_record.quote_currency} is filled."
-        )
+        # self.notify_hb_app(
+        #     f"{clock_timestamp.strftime('%m/%d, %H:%M:%S')} - Maker SELL order {limit_order_record.quantity} {limit_order_record.base_currency} @ "
+        #     f"{limit_order_record.price} {limit_order_record.quote_currency} is filled."
+        # )
 
     cdef bint c_is_within_tolerance(self, list current_prices, list proposal_prices):
         if len(current_prices) != len(proposal_prices):
