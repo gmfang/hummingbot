@@ -393,26 +393,29 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
             if self.c_is_algorithm_ready():
                 proposal = None
                 if self._create_timestamp <= self._current_timestamp:
-                    ema_short = market.kline_stream_tracker.ema_short
-                    ema_long = market.kline_stream_tracker.ema_long
+                    # Check technical indicators.
                     macd_histograms = market.kline_stream_tracker.macd_histograms
-                    third_hist = round(macd_histograms[-3], 6)
-                    second_hist = round(macd_histograms[-2], 6)
-                    last_hist = round(macd_histograms[-1], 6)
-                    if third_hist < second_hist < last_hist:
-                        self._upward_trend = True
-                        self._histogram_retrace = False
-                        self.logger().info(
-                            f"Upward Trending. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
-                    else:
-                        self._histogram_retrace = True
-                        self.logger().info(
-                            f"Histogram Retrace Detected. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
+                    if len(macd_histograms) >= 3:
+                        ema_short = market.kline_stream_tracker.ema_short
+                        ema_long = market.kline_stream_tracker.ema_long
+                        third_hist = round(macd_histograms[-3], 6)
+                        second_hist = round(macd_histograms[-2], 6)
+                        last_hist = round(macd_histograms[-1], 6)
+                        if third_hist < second_hist < last_hist:
+                            self._upward_trend = True
+                            self._histogram_retrace = False
+                            self.logger().info(
+                                f"Upward Trending. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
+                        else:
+                            self._histogram_retrace = True
+                            self.logger().info(
+                                f"Histogram Retrace Detected. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
 
-                    if third_hist > second_hist > last_hist:
-                        self._upward_trend = False
-                        self.logger().info(
-                            f"Downward Trending. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
+                        if third_hist > second_hist > last_hist:
+                            self._upward_trend = False
+                            self.logger().info(
+                                f"Downward Trending. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
+
                     self.logger().info(f"InFlightOrders: {market.in_flight_orders}")
                     # 1. Get current balance.
                     base_balance, quote_balance = self.c_get_adjusted_available_balance(
