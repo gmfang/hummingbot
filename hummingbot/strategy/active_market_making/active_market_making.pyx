@@ -417,17 +417,18 @@ cdef class ActiveMarketMakingStrategy(StrategyBase):
                                 f"Downward Trending. Last 3 MACD Histograms: {third_hist}, {second_hist}, {last_hist}")
 
                     self.logger().info(f"InFlightOrders: {market.in_flight_orders}")
-                    # 1. Get current balance.
-                    base_balance, quote_balance = self.c_get_adjusted_available_balance(
-                        self.active_orders)
-                    # 2. Decide whether we should buy based on target base pct.
-                    self.c_decide_buy_or_sell()
-                    # 3. Create a base buy/sell proposal.
-                    proposal = self.c_create_base_proposal(base_balance,
-                                                           quote_balance)
-                    # 4. Apply budget constraint, i.e. can't buy/sell more than what you have.
-                    self.c_apply_budget_constraint(proposal, base_balance,
-                                                   quote_balance)
+                    if self._cancel_timestamp < self._current_timestamp:
+                        # 1. Get current balance.
+                        base_balance, quote_balance = self.c_get_adjusted_available_balance(
+                            self.active_orders)
+                        # 2. Decide whether we should buy based on target base pct.
+                        self.c_decide_buy_or_sell()
+                        # 3. Create a base buy/sell proposal.
+                        proposal = self.c_create_base_proposal(base_balance,
+                                                               quote_balance)
+                        # 4. Apply budget constraint, i.e. can't buy/sell more than what you have.
+                        self.c_apply_budget_constraint(proposal, base_balance,
+                                                       quote_balance)
 
                 self.c_cancel_active_orders()
                 if self._is_debug:
